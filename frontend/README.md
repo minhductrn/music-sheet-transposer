@@ -1,75 +1,152 @@
-# React + TypeScript + Vite
+# Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The frontend for the Music Sheet Transposer web application.
 
-Currently, two official plugins are available:
+The frontend is responsible for the user interface, navigation, user interaction, and communication with the backend API. Music-processing logic should remain outside the UI layer.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Technology
 
-## React Compiler
+* React
+* TypeScript
+* Vite
+* React Router
+* ESLint
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Requirements
 
-## Expanding the ESLint configuration
+* Node.js 24+
+* npm
+* WSL2 / Ubuntu development environment
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+The project uses NVM for Node.js version management.
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+Check the installed versions:
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+node -v
+npm -v
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+## Setup
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+From the frontend directory:
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+cd ~/music-sheet-transposer/frontend
 ```
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+## Environment Configuration
+
+The frontend uses a Vite environment variable for the backend URL.
+
+Copy the example configuration if needed:
+
+```bash
+cp .env.example .env
+```
+
+Default configuration:
+
+```text
+VITE_BACKEND_URL=http://127.0.0.1:8000
+```
+
+Do not commit `.env` files containing environment-specific configuration or secrets.
+
+## Development
+
+Start the Vite development server:
+
+```bash
+npm run dev
+```
+
+The development server normally runs at:
+
+```text
+http://localhost:5173/
+```
+
+If port 5173 is already in use, Vite automatically selects another available port.
+
+## Backend Connection
+
+During development, Vite proxies `/api` requests to the FastAPI backend.
+
+Example:
+
+```text
+Frontend
+    │
+    │ /api/v1/health
+    ▼
+Vite Proxy
+    │
+    ▼
+FastAPI :8000
+```
+
+The backend must be running for API-dependent frontend features to work.
+
+## Build
+
+Create a production build:
+
+```bash
+npm run build
+```
+
+## Lint
+
+Run ESLint:
+
+```bash
+npm run lint
+```
+
+## Source Structure
+
+```text
+src/
+├── components/    # Reusable UI components
+├── pages/         # Route-level pages
+├── services/      # Backend/API communication
+├── types/         # TypeScript types
+├── App.tsx        # Application routes
+├── index.css      # Global styles
+└── main.tsx       # Application entry point
+```
+
+## Development Principles
+
+* Keep API calls inside `services/`.
+* Keep reusable UI components inside `components/`.
+* Keep route-level UI inside `pages/`.
+* Use TypeScript types for API responses and application data.
+* Do not put music-processing logic directly inside UI components.
+* Keep frontend changes small and testable.
+* Avoid committing `.env`, `node_modules`, or `dist`.
+
+## Current Status
+
+**Phase 3 — Frontend Foundation: Complete**
+
+Implemented:
+
+* React + TypeScript + Vite
+* React Router
+* Application layout
+* Home page
+* Backend health connection
+* Vite API proxy
+* Environment configuration
+* Production build
+* ESLint validation
+
+Future frontend work will integrate MusicXML, transposition, recognition, rendering, and export capabilities as the corresponding backend services are developed.
