@@ -579,35 +579,6 @@ feat: add transposition service
 test: add MusicXML round-trip tests
 fix: preserve measure timing context
 docs: update project architecture
-GitHub Copilot Working Rules
-
-When using GitHub Copilot on this project:
-
-Read PROJECT_SPEC.md before making architectural changes.
-Prefer the smallest change that satisfies the requirement.
-Keep frontend and backend responsibilities separate.
-Add or update tests with functional changes.
-Do not introduce unnecessary dependencies.
-Do not commit secrets.
-Avoid scope creep.
-Explain the intended file changes before large implementation tasks.
-Validate the result after each meaningful change.
-Current Objective
-
-The immediate objective is to build a reliable music-processing foundation before adding advanced recognition and user-facing features.
-
-The project should first establish a stable path from:
-
-MusicXML
-    |
-    v
-Internal Music Model
-    |
-    v
-Music Processing
-    |
-    v
-MusicXML
 
 Once this foundation is reliable, PDF/image recognition, rendering, transposition workflows, export, and sharing can be added incrementally.
 
