@@ -1,41 +1,31 @@
-Music Sheet Transposer
+# Music Sheet Transposer
 
 A web application for importing, viewing, and transposing sheet music.
 
-The project is designed with a clear separation between the web UI and the core music-processing layer so that the same music-processing capabilities can later support web and mobile applications.
+The project separates the web UI from the core music-processing layer so that the music-processing capabilities can eventually be reused by web and mobile applications.
 
-Project Status
+---
 
-Phase 4 — MusicXML Foundation ✅
+## Project Status
 
-The project currently has a working backend foundation, frontend foundation, and a functional MusicXML parsing/exporting layer.
+**Phase 4 — MusicXML Foundation**
 
-Completed
-Project architecture and development specification
-FastAPI backend foundation
-/api/v1/health API endpoint
-React + TypeScript + Vite frontend
-React Router foundation
-Frontend-to-backend API communication
-Responsive application layout
-Python music-domain models
-Pitch model
-Note model
-Measure model
-Time signature model
-Part and Score models
-MusicXML parser
-MusicXML exporter
-Multiple-measure MusicXML support
-Measure numbers
-MusicXML divisions
-Time signatures
-Notes and rests
-Note durations
-Note types
-MusicXML round-trip testing
-Backend test suite: 12 passed, 2 warnings
-In Progress
+The project currently has:
+
+- FastAPI backend foundation
+- React + TypeScript + Vite frontend
+- Music-domain models
+- MusicXML parser
+- MusicXML exporter
+- Multiple-measure support
+- MusicXML timing support
+- Notes and rests
+- Round-trip testing
+
+### Current Test Status
+
+
+12 passed, 2 warnings
 
 The next MusicXML improvements are:
 
@@ -858,3 +848,5 @@ Additional MusicXML Fidelity
 Transposition
 
 The project will continue to evolve incrementally from a reliable MusicXML foundation toward a complete sheet-music import, viewing, transposition, and export application.
+
+```text
