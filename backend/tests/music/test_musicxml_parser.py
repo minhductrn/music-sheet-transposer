@@ -1,7 +1,8 @@
 from pathlib import Path
 
-from app.music.musicxml.parser import parse_musicxml
+from app.music.models.note import NoteType
 from app.music.models.pitch import PitchStep
+from app.music.musicxml.parser import parse_musicxml
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "simple_score.musicxml"
@@ -17,35 +18,72 @@ def test_parse_simple_musicxml() -> None:
     assert part.id == "P1"
     assert part.name == "Piano"
 
-    assert len(part.measures) == 1
+    assert len(part.measures) == 2
 
-    measure = part.measures[0]
-    assert measure.number == 1
-    assert len(measure.notes) == 4
+    assert part.measures[0].number == 1
+    assert len(part.measures[0].notes) == 3
+
+    assert part.measures[1].number == 2
+    assert len(part.measures[1].notes) == 1
 
 
 def test_parse_note_pitches() -> None:
     score = parse_musicxml(FIXTURE)
 
-    notes = score.parts[0].measures[0].notes
+    measure_1_notes = score.parts[0].measures[0].notes
+    measure_2_notes = score.parts[0].measures[1].notes
 
-    assert notes[0].pitch is not None
-    assert notes[0].pitch.step == PitchStep.C
-    assert notes[0].pitch.octave == 4
+    assert measure_1_notes[0].pitch is not None
+    assert measure_1_notes[0].pitch.step == PitchStep.C
+    assert measure_1_notes[0].pitch.octave == 4
 
-    assert notes[1].pitch is not None
-    assert notes[1].pitch.step == PitchStep.D
+    assert measure_1_notes[1].pitch is not None
+    assert measure_1_notes[1].pitch.step == PitchStep.D
 
-    assert notes[2].pitch is not None
-    assert notes[2].pitch.step == PitchStep.E
+    assert measure_1_notes[2].pitch is not None
+    assert measure_1_notes[2].pitch.step == PitchStep.E
 
-    assert notes[3].pitch is not None
-    assert notes[3].pitch.step == PitchStep.F
+    assert measure_2_notes[0].pitch is not None
+    assert measure_2_notes[0].pitch.step == PitchStep.F
 
 
 def test_parse_note_durations() -> None:
     score = parse_musicxml(FIXTURE)
 
-    notes = score.parts[0].measures[0].notes
+    measure_1_notes = score.parts[0].measures[0].notes
+    measure_2_notes = score.parts[0].measures[1].notes
 
-    assert [note.duration for note in notes] == [1, 1, 1, 1]
+    assert [note.duration for note in measure_1_notes] == [1, 2, 1]
+    assert [note.duration for note in measure_2_notes] == [4]
+
+
+def test_parse_note_types() -> None:
+    score = parse_musicxml(FIXTURE)
+
+    measure_1_notes = score.parts[0].measures[0].notes
+    measure_2_notes = score.parts[0].measures[1].notes
+
+    assert [note.note_type for note in measure_1_notes] == [
+        NoteType.QUARTER,
+        NoteType.HALF,
+        NoteType.QUARTER,
+    ]
+
+    assert [note.note_type for note in measure_2_notes] == [
+        NoteType.WHOLE,
+    ]
+
+
+def test_parse_timing_information() -> None:
+    score = parse_musicxml(FIXTURE)
+
+    measure_1 = score.parts[0].measures[0]
+    measure_2 = score.parts[0].measures[1]
+
+    assert measure_1.divisions == 1
+    assert measure_1.time_signature is not None
+    assert measure_1.time_signature.beats == 4
+    assert measure_1.time_signature.beat_type == 4
+
+    assert measure_2.divisions is None
+    assert measure_2.time_signature is None

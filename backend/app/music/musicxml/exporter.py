@@ -20,28 +20,32 @@ def export_musicxml(score: Score, path: Path) -> None:
     for part in score.parts:
         part_element = ET.SubElement(root, "part", id=part.id)
 
-        for index, measure in enumerate(part.measures):
+        for measure in part.measures:
             measure_element = ET.SubElement(
                 part_element,
                 "measure",
                 number=str(measure.number),
             )
 
-            if index == 0:
+            if (
+                measure.divisions is not None
+                or measure.time_signature is not None
+            ):
                 attributes = ET.SubElement(measure_element, "attributes")
 
-                ET.SubElement(attributes, "divisions").text = "1"
+                if measure.divisions is not None:
+                    ET.SubElement(attributes, "divisions").text = str(
+                        measure.divisions
+                    )
 
-                key = ET.SubElement(attributes, "key")
-                ET.SubElement(key, "fifths").text = "0"
-
-                time = ET.SubElement(attributes, "time")
-                ET.SubElement(time, "beats").text = "4"
-                ET.SubElement(time, "beat-type").text = "4"
-
-                clef = ET.SubElement(attributes, "clef")
-                ET.SubElement(clef, "sign").text = "G"
-                ET.SubElement(clef, "line").text = "2"
+                if measure.time_signature is not None:
+                    time = ET.SubElement(attributes, "time")
+                    ET.SubElement(time, "beats").text = str(
+                        measure.time_signature.beats
+                    )
+                    ET.SubElement(time, "beat-type").text = str(
+                        measure.time_signature.beat_type
+                    )
 
             for note in measure.notes:
                 note_element = ET.SubElement(measure_element, "note")
@@ -71,6 +75,12 @@ def export_musicxml(score: Score, path: Path) -> None:
                     note_element,
                     "duration",
                 ).text = str(note.duration)
+
+                if note.note_type is not None:
+                    ET.SubElement(
+                        note_element,
+                        "type",
+                    ).text = note.note_type.value
 
     tree = ET.ElementTree(root)
     ET.indent(tree, space="  ")

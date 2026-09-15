@@ -25,22 +25,32 @@ def test_musicxml_roundtrip(tmp_path: Path) -> None:
     assert restored_part.name == original_part.name
     assert len(restored_part.measures) == len(original_part.measures)
 
-    original_measure = original_part.measures[0]
-    restored_measure = restored_part.measures[0]
-
-    assert restored_measure.number == original_measure.number
-    assert len(restored_measure.notes) == len(original_measure.notes)
-
-    for original_note, restored_note in zip(
-        original_measure.notes,
-        restored_measure.notes,
+    for original_measure, restored_measure in zip(
+        original_part.measures,
+        restored_part.measures,
     ):
-        assert restored_note.duration == original_note.duration
-        assert restored_note.is_rest == original_note.is_rest
+        assert restored_measure.number == original_measure.number
+        assert restored_measure.divisions == original_measure.divisions
+        assert (
+            restored_measure.time_signature
+            == original_measure.time_signature
+        )
 
-        assert restored_note.pitch is not None
-        assert original_note.pitch is not None
+        assert len(restored_measure.notes) == len(
+            original_measure.notes
+        )
 
-        assert restored_note.pitch.step == original_note.pitch.step
-        assert restored_note.pitch.octave == original_note.pitch.octave
-        assert restored_note.pitch.alter == original_note.pitch.alter
+        for original_note, restored_note in zip(
+            original_measure.notes,
+            restored_measure.notes,
+        ):
+            assert restored_note.duration == original_note.duration
+            assert restored_note.note_type == original_note.note_type
+            assert restored_note.is_rest == original_note.is_rest
+
+            assert restored_note.pitch is not None
+            assert original_note.pitch is not None
+
+            assert restored_note.pitch.step == original_note.pitch.step
+            assert restored_note.pitch.octave == original_note.pitch.octave
+            assert restored_note.pitch.alter == original_note.pitch.alter
