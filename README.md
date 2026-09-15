@@ -1,78 +1,91 @@
-# Music Sheet Transposer
+Music Sheet Transposer
 
-A web-based application for importing, viewing, and transposing sheet music.
+A web application for importing, viewing, and transposing sheet music.
 
-The project is designed with a clean separation between the web interface, backend API, and core music-processing logic so that future features such as OMR, MusicXML rendering, transposition, PDF export, and mobile applications can be added without redesigning the foundation.
+The project is designed with a clear separation between the web UI and the core music-processing layer so that the same music-processing capabilities can later support web and mobile applications.
 
----
+Project Status
 
-## Project Status
+Phase 4 — MusicXML Foundation ✅
 
-**Current Phase: Phase 4 — MusicXML Foundation ✅**
+The project currently has a working backend foundation, frontend foundation, and a functional MusicXML parsing/exporting layer.
 
-The project has completed the initial application foundation and the first version of the internal music model and MusicXML processing layer.
+Completed
+Project architecture and development specification
+FastAPI backend foundation
+/api/v1/health API endpoint
+React + TypeScript + Vite frontend
+React Router foundation
+Frontend-to-backend API communication
+Responsive application layout
+Python music-domain models
+Pitch model
+Note model
+Measure model
+Time signature model
+Part and Score models
+MusicXML parser
+MusicXML exporter
+Multiple-measure MusicXML support
+Measure numbers
+MusicXML divisions
+Time signatures
+Notes and rests
+Note durations
+Note types
+MusicXML round-trip testing
+Backend test suite: 12 passed, 2 warnings
+In Progress
 
-### Completed
+The next MusicXML improvements are:
 
-- [x] Project specification and architecture
-- [x] Git/GitHub repository
-- [x] Backend FastAPI foundation
-- [x] `/api/v1/health` API endpoint
-- [x] Backend automated tests
-- [x] React + TypeScript + Vite frontend
-- [x] Frontend/backend API integration
-- [x] Frontend development proxy
-- [x] Responsive application shell
-- [x] Internal music data model
-- [x] MusicXML parser foundation
-- [x] MusicXML exporter foundation
-- [x] MusicXML round-trip test
-- [x] 9 backend tests passing
+Dotted notes
+Ties
+Expanded rest handling
+Changing time signatures
+Additional MusicXML fidelity
+More comprehensive round-trip tests
 
-### In Progress
+After the MusicXML foundation is stable, the next major feature will be music transposition.
 
-- [ ] Improve MusicXML fidelity
-- [ ] Add complete note duration/type handling
-- [ ] Add MusicXML rendering/viewer
-- [ ] Implement transposition engine
-- [ ] Implement OMR integration
-- [ ] Add file upload workflow
+Future application features include:
 
----
+Sheet music viewer
+MusicXML import/export
+PDF import
+Image import
+Camera capture
+Optical Music Recognition (OMR)
+Transposition
+Export and sharing
+Architecture
+                    Music Sheet Transposer
+                             │
+             ┌───────────────┴───────────────┐
+             │                               │
+        Frontend                         Backend
+             │                               │
+      React + TypeScript                 FastAPI
+             │                               │
+             └───────────────┬───────────────┘
+                             │
+                    Music Processing
+                             │
+          ┌──────────────────┼──────────────────┐
+          │                  │                  │
+       MusicXML           Internal          Transposition
+       Parser             Music Model          Engine
+          │                  │                  │
+          └──────────────────┼──────────────────┘
+                             │
+                       MusicXML Export
+                             │
+                       Future OMR Layer
+Music Processing Pipeline
 
-# Architecture
+The long-term processing pipeline is:
 
-The application follows a layered architecture.
-
-```text
-                    User
-                     │
-                     ▼
-          ┌─────────────────────┐
-          │   React Frontend    │
-          │  TypeScript + Vite  │
-          └──────────┬──────────┘
-                     │
-                     │ REST API
-                     ▼
-          ┌─────────────────────┐
-          │    FastAPI Backend  │
-          │     /api/v1         │
-          └──────────┬──────────┘
-                     │
-          ┌──────────┴──────────┐
-          │                     │
-          ▼                     ▼
- ┌──────────────────┐   ┌──────────────────┐
- │  Music Services  │   │  Future Services │
- │                  │   │                  │
- │ Internal Model   │   │ OMR              │
- │ MusicXML Parser  │   │ Storage          │
- │ MusicXML Exporter│   │ Recognition      │
- │ Transposition    │   │ Rendering        │
- └──────────────────┘   └──────────────────┘
-
- PDF / Image / Camera
+PDF / Image / Camera
         │
         ▼
        OMR
@@ -81,276 +94,321 @@ The application follows a layered architecture.
     MusicXML
         │
         ▼
-    Validation
+   Validation
         │
         ▼
- Internal Music Model
+Internal Music Model
         │
         ▼
-   Transposition
-        │
-        ▼
- Internal Music Model
+  Transposition
         │
         ▼
     MusicXML
         │
         ▼
- Rendering / Export
+ Viewer / Export / Share
 
- MusicXML Foundation
+The UI layer is intentionally separated from the core music-processing layer.
 
-Phase 4 introduces the first internal representation of musical notation.
+This allows the music-processing functionality to evolve independently and potentially be reused by future mobile applications.
 
-The current model contains:
+MusicXML Foundation
 
+The current implementation provides the first functional MusicXML foundation.
+
+The internal model is designed to represent musical information independently from the XML format.
+
+Current Music Model
 Score
  └── Part
       └── Measure
+           ├── TimeSignature
            └── Note
-                └── Pitch
-Current models
-Pitch
-
-Represents the pitch of a note.
-
-Pitch
-├── step
-├── octave
-└── alter
-
-Example:
-
-C4
-D4
-F#4
-Bb4
-Note
-
-Represents a musical note or rest.
-
-Note
-├── pitch
-├── duration
-└── is_rest
-Measure
-
-Represents a measure containing notes.
-
-Measure
-├── number
-└── notes[]
-Part
-
-Represents a musical part or instrument.
-
-Part
-├── id
-├── name
-└── measures[]
 Score
 
 Represents the complete musical score.
 
-Score
-├── title
-└── parts[]
+Current responsibilities include:
+
+Score title
+Parts
+Part
+
+Represents an individual musical part.
+
+Current responsibilities include:
+
+Part ID
+Part name
+Measures
+Measure
+
+Represents one musical measure.
+
+Current properties include:
+
+Measure number
+divisions
+Time signature
+Notes
+TimeSignature
+
+Represents the time signature.
+
+Current properties include:
+
+Beats
+Beat type
+
+For example:
+
+4/4
+
+is represented as:
+
+beats = 4
+beat_type = 4
+Note
+
+Represents an individual musical event.
+
+Current properties include:
+
+Pitch
+Duration
+Note type
+Rest state
+
+Pitch contains:
+
+Step
+Octave
+Optional alteration
+
+Example:
+
+C4 quarter note
 MusicXML Parser
 
-The current MusicXML parser supports the basic MusicXML Partwise structure.
+The parser converts MusicXML into the internal music model.
 
-Current functionality includes:
+Current parser functionality includes:
 
 Score title
 Parts
 Part names
-Measures
+Multiple measures
 Measure numbers
 Notes
 Rests
-Pitch step
-Pitch octave
-Pitch alteration
-Note duration
+Pitch
+Duration
+Note type
+divisions
+Time signatures
 
 Example:
 
-from pathlib import Path
+<measure number="1">
+    <attributes>
+        <divisions>1</divisions>
+        <time>
+            <beats>4</beats>
+            <beat-type>4</beat-type>
+        </time>
+    </attributes>
 
-from app.music.musicxml.parser import parse_musicxml
+    <note>
+        <pitch>
+            <step>C</step>
+            <octave>4</octave>
+        </pitch>
+        <duration>1</duration>
+        <type>quarter</type>
+    </note>
+</measure>
 
-score = parse_musicxml(
-    Path("simple_score.musicxml")
-)
+The parser converts this into the internal representation instead of allowing the rest of the application to depend directly on XML structures.
 
-print(score)
+Timing and Measure Persistence
 
-The parser converts MusicXML into the application's internal Score model.
+MusicXML attributes such as divisions and time signatures do not necessarily need to be repeated in every measure.
 
-MusicXML
-    │
-    ▼
-MusicXML Parser
-    │
-    ▼
-Internal Score Model
+For example:
+
+<measure number="1">
+    <attributes>
+        <divisions>1</divisions>
+        <time>
+            <beats>4</beats>
+            <beat-type>4</beat-type>
+        </time>
+    </attributes>
+</measure>
+
+<measure number="2">
+    ...
+</measure>
+
+Measure 2 may omit the attributes because they continue from measure 1.
+
+The internal model therefore distinguishes between:
+
+None
+
+and an actual timing value.
+
+None means:
+
+No new value was declared in this measure.
+
+It does not mean:
+
+The score has no effective timing information.
+
+This preserves the semantics of MusicXML declarations and allows the exporter to avoid unnecessarily repeating attributes.
+
 MusicXML Exporter
 
 The exporter converts the internal music model back into MusicXML.
 
-Internal Score Model
-        │
-        ▼
-MusicXML Exporter
-        │
-        ▼
-MusicXML file
+Current exporter functionality includes:
 
-Example:
-
-from pathlib import Path
-
-from app.music.musicxml.exporter import export_musicxml
-
-export_musicxml(
-    score,
-    Path("output.musicxml")
-)
-
-The current exporter generates:
-
-MusicXML 4.0 Partwise document
+MusicXML 4.0 Partwise format
 Score title
 Part list
 Part names
-Measures
-Basic attributes
-Key
-Time signature
-Clef
+Multiple measures
+Measure numbers
+divisions
+Time signatures
 Notes
 Rests
 Pitch
 Duration
+Note type
 
-MusicXML fidelity will be expanded in later phases.
+The exporter is designed to preserve the distinction between newly declared attributes and inherited attributes.
 
-MusicXML Round Trip
+Round-Trip Testing
 
-A round-trip test verifies that the basic musical information survives a parse/export/parse cycle.
+The current MusicXML foundation includes round-trip testing:
 
-              MusicXML
-                 │
-                 ▼
-              Parser
-                 │
-                 ▼
-         Internal Music Model
-                 │
-                 ▼
-              Exporter
-                 │
-                 ▼
-          New MusicXML
-                 │
-                 ▼
-              Parser
-                 │
-                 ▼
-         Internal Music Model
+MusicXML
+   │
+   ▼
+Parser
+   │
+   ▼
+Internal Music Model
+   │
+   ▼
+Exporter
+   │
+   ▼
+MusicXML
 
-The current round-trip test verifies preservation of:
+The round-trip tests verify that important musical information is preserved, including:
 
 Score title
 Part
-Measure
+Part name
+Multiple measures
+Measure numbers
+Timing information
+divisions
+Time signatures
 Notes
 Pitch
 Duration
+Note type
+Rest state
+
+The current fixture contains two measures.
+
+The first measure includes:
+
+divisions = 1
+4/4 time signature
+C quarter note
+D half note
+E quarter note
+
+The second measure contains:
+
+F whole note
+No new timing attributes
+
+The second measure therefore inherits the effective timing context from the previous measure.
+
 Project Structure
 music-sheet-transposer/
 │
-├── PROJECT_SPEC.md
-├── README.md
-├── .gitignore
-│
 ├── backend/
-│   ├── requirements.txt
-│   │
 │   ├── app/
-│   │   ├── __init__.py
-│   │   │
-│   │   ├── main.py
-│   │   │
 │   │   ├── api/
-│   │   │   ├── __init__.py
 │   │   │   └── v1/
-│   │   │       ├── __init__.py
 │   │   │       └── health.py
 │   │   │
 │   │   ├── core/
-│   │   │   ├── __init__.py
 │   │   │   └── config.py
 │   │   │
+│   │   ├── music/
+│   │   │   ├── models/
+│   │   │   │   ├── pitch.py
+│   │   │   │   ├── note.py
+│   │   │   │   ├── measure.py
+│   │   │   │   ├── time_signature.py
+│   │   │   │   ├── part.py
+│   │   │   │   └── score.py
+│   │   │   │
+│   │   │   ├── parser/
+│   │   │   │   └── musicxml_parser.py
+│   │   │   │
+│   │   │   └── exporter/
+│   │   │       └── musicxml_exporter.py
+│   │   │
 │   │   ├── schemas/
-│   │   │   ├── __init__.py
 │   │   │   └── health.py
 │   │   │
-│   │   └── music/
-│   │       ├── __init__.py
-│   │       │
-│   │       ├── models/
-│   │       │   ├── __init__.py
-│   │       │   ├── pitch.py
-│   │       │   ├── note.py
-│   │       │   ├── measure.py
-│   │       │   └── score.py
-│   │       │
-│   │       └── musicxml/
-│   │           ├── __init__.py
-│   │           ├── parser.py
-│   │           └── exporter.py
+│   │   └── main.py
 │   │
 │   ├── tests/
+│   │   ├── fixtures/
+│   │   │   └── simple_score.musicxml
 │   │   ├── test_health.py
-│   │   │
-│   │   └── music/
-│   │       ├── fixtures/
-│   │       │   └── simple_score.musicxml
-│   │       ├── test_models.py
-│   │       ├── test_musicxml_parser.py
-│   │       └── test_musicxml_roundtrip.py
+│   │   └── ...
 │   │
-│   └── .venv/
-│       └── ...
+│   └── requirements.txt
 │
-└── frontend/
-    ├── package.json
-    ├── package-lock.json
-    ├── vite.config.ts
-    ├── tsconfig.json
-    ├── tsconfig.app.json
-    ├── tsconfig.node.json
-    ├── eslint.config.js
-    ├── index.html
-    ├── .env.example
-    │
-    └── src/
-        ├── main.tsx
-        ├── App.tsx
-        ├── index.css
-        │
-        ├── components/
-        │   └── Layout.tsx
-        │
-        ├── pages/
-        │   └── Home.tsx
-        │
-        ├── services/
-        │   └── api.ts
-        │
-        └── types/
-            └── health.ts
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   │   └── Layout.tsx
+│   │   │
+│   │   ├── pages/
+│   │   │   └── Home.tsx
+│   │   │
+│   │   ├── services/
+│   │   │   └── api.ts
+│   │   │
+│   │   ├── types/
+│   │   │   └── health.ts
+│   │   │
+│   │   ├── App.tsx
+│   │   ├── main.tsx
+│   │   └── index.css
+│   │
+│   ├── .env.example
+│   ├── package.json
+│   └── vite.config.ts
+│
+├── .vscode/
+│   └── settings.json
+│
+├── .gitignore
+├── PROJECT_SPEC.md
+└── README.md
 Technology Stack
 Frontend
 React
@@ -358,19 +416,25 @@ TypeScript
 Vite
 React Router
 CSS
+
+Future frontend technologies may include:
+
+OpenSheetMusicDisplay
+React Testing Library
+Vitest
 Backend
 Python
 FastAPI
 Pydantic
 Pydantic Settings
-Uvicorn
 pytest
 HTTPX
 Music
 MusicXML
-Python XML processing
-Pydantic internal music models
-Development Environment
+Internal Python music model
+Future OMR integration
+Future transposition engine
+Development Tools
 Windows 11
 WSL2
 Ubuntu
@@ -379,11 +443,14 @@ Git
 GitHub
 GitHub Copilot
 Node.js managed with NVM
+
+Current Node environment:
+
+Node.js 24.21.0
+npm 11.19.0
 Development Environment
 
-The project is developed primarily inside WSL2.
-
-Example environment:
+The project is developed on:
 
 Windows 11
     │
@@ -394,31 +461,28 @@ WSL2
 Ubuntu
     │
     ├── Python
+    ├── FastAPI
     ├── Node.js
-    ├── Git
-    └── VS Code
+    ├── npm
+    └── Git
 
-Node.js is managed using NVM.
+Node.js is managed with NVM rather than the system package manager.
 
-Current development environment uses:
+Backend Development
 
-Node.js v24.21.0
-npm 11.19.0
-Running the Backend
+From the project root:
 
-From WSL2:
+cd backend
 
-cd ~/music-sheet-transposer/backend
-
-Activate the virtual environment:
+Activate the Python virtual environment:
 
 source .venv/bin/activate
 
-Start FastAPI:
+Run the development server:
 
-PYTHONPATH=. uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+uvicorn app.main:app --reload
 
-The backend API is available at:
+The API is available at:
 
 http://127.0.0.1:8000
 
@@ -426,92 +490,55 @@ Health endpoint:
 
 http://127.0.0.1:8000/api/v1/health
 
-Test with:
-
-curl http://127.0.0.1:8000/api/v1/health
-
 Expected response:
 
 {
   "status": "ok"
 }
-Running Backend Tests
-
-From the backend directory:
-
-cd ~/music-sheet-transposer/backend
-source .venv/bin/activate
+Backend Testing
 
 Run:
 
+cd backend
 PYTHONPATH=. PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -v
 
 Current result:
 
-9 passed
+12 passed, 2 warnings
 
-The test suite currently covers:
+The two warnings are related to the test environment/plugin configuration and do not represent failing tests.
 
-API health endpoint
-Music model validation
-Pitch model
-Note model
-Rest model
-Score hierarchy
-MusicXML parser
-MusicXML pitch parsing
-MusicXML round trip
-Running the Frontend
+Frontend Development
 
-From another WSL2 terminal:
+From the project root:
 
-cd ~/music-sheet-transposer/frontend
-
-Install dependencies if needed:
-
+cd frontend
 npm install
-
-Start the development server:
-
 npm run dev
 
-Vite will display the local development URL.
+The Vite development server normally starts on:
 
-The frontend uses a development proxy so /api/* requests are forwarded to the FastAPI backend.
+http://localhost:5173
 
-Frontend Environment
+If that port is already in use, Vite automatically selects another available port.
 
-The example environment file is:
-
-frontend/.env.example
-
-It contains:
-
-VITE_BACKEND_URL=http://127.0.0.1:8000
-
-Local environment files should not be committed.
-
-The project .gitignore excludes:
-
-.env
-*.local
 Frontend Validation
 
 Build the frontend:
 
 npm run build
 
-Run ESLint:
+Run linting:
 
 npm run lint
 
-Both should complete successfully before committing frontend changes.
+Both currently pass successfully.
 
 API Design
 
-The backend API is versioned under:
+The backend API uses versioned routes:
 
-/api/v1
+/api/v1/
 
 Current endpoint:
 
@@ -519,101 +546,103 @@ GET /api/v1/health
 
 Future API areas may include:
 
-/api/v1/files
-/api/v1/scores
 /api/v1/musicxml
 /api/v1/transposition
 /api/v1/recognition
 /api/v1/export
 
-These endpoints will be introduced only when the corresponding features are implemented.
+The exact API structure will evolve as the corresponding application features are implemented.
 
-Future Music Processing Services
+Frontend API Architecture
 
-The architecture is designed around service abstractions.
+Frontend components and pages should not directly construct backend URLs or call fetch() for application APIs.
+
+Backend communication is centralized through:
+
+frontend/src/services/
+
+The current API service is:
+
+frontend/src/services/api.ts
+
+The Vite development server proxies:
+
+/api/*
+
+to the FastAPI backend.
+
+This keeps the frontend independent from the backend host configuration.
+
+Future Service Architecture
+
+The project is intended to introduce service abstractions as the application grows.
 
 Potential services include:
 
 MusicRecognitionService
 TranspositionService
 StorageService
-RenderingService
-ExportService
 
-The goal is to keep the core music model independent from external implementations.
+Possible architecture:
 
-For example, OMR could eventually be replaced without changing the transposition engine:
+              Application Layer
+                      │
+        ┌─────────────┼─────────────┐
+        │             │             │
+ Recognition     Transposition    Storage
+  Service          Service        Service
+        │             │             │
+        ▼             ▼             ▼
+       OMR         Music Model     Database
 
-             OMR Provider A
-                  │
-                  ▼
-             MusicXML
-                  │
-                  ▼
-       Internal Music Model
-                  │
-                  ▼
-        Transposition Engine
-                  │
-                  ▼
-             MusicXML
-
-Another OMR provider could be added later without changing the core architecture.
+This will allow individual implementations to change without coupling the rest of the application to a specific provider or technology.
 
 Planned Features
+MusicXML
+Dotted notes
+Ties
+Expanded rest handling
+Changing time signatures
+Additional MusicXML elements
+Better validation
+Higher-fidelity round-trip conversion
+Transposition
+Transpose by semitone
+Transpose by interval
+Instrument-specific transposition
+Preserve rhythm and duration
+Generate transposed MusicXML
+Viewer
+Render MusicXML
+Zoom
+Page navigation
+Playback support
+Responsive layout
 Import
 
-Future input sources:
+Future input formats:
 
+MusicXML
 PDF
 Image
 Camera
-MusicXML
-Recognition
+Optical Music Recognition
 
-Future OMR workflow:
+Future OMR pipeline:
 
 Image / PDF
      │
      ▼
-    OMR
+Image Processing
      │
      ▼
- MusicXML
+Music Recognition
+     │
+     ▼
+MusicXML
      │
      ▼
 Validation
-Viewing
-
-The application will eventually provide a browser-based music sheet viewer.
-
-Potential technology:
-
-OpenSheetMusicDisplay
-MusicXML rendering
-Interactive score viewing
-Transposition
-
-The application will support pitch transposition.
-
-Examples:
-
-Concert Pitch
-     │
-     ▼
-Transpose
-     │
-     ▼
-Instrument Pitch
-
-Potential instrument support includes:
-
-Alto Saxophone
-Soprano Saxophone
-Other transposing instruments
-
-The exact transposition rules will be implemented as part of the transposition engine rather than embedded in the UI.
-
 Export
 
 Future export options may include:
@@ -622,195 +651,210 @@ MusicXML
 PDF
 Image
 Shareable files
-Sharing
-
-Future versions may support sharing through:
-
-Email
-Messaging
-Download
-Shareable links
 Development Phases
 Phase 1 — Foundation
- Project specification
- Repository structure
- Git initialization
- Development environment
+
+Completed.
+
+Repository
+Project specification
+Basic architecture
+Development environment
 Phase 2 — Backend Foundation
- FastAPI application
- API versioning
- Configuration
- Health endpoint
- Automated tests
+
+Completed.
+
+FastAPI
+Configuration
+API versioning
+Health endpoint
+Testing foundation
 Phase 3 — Frontend Foundation
- React
- TypeScript
- Vite
- React Router
- Application layout
- Backend connection
- Responsive styling
- Frontend build/lint validation
+
+Completed.
+
+React
+TypeScript
+Vite
+Routing
+Layout
+Backend connectivity
+Responsive styling
 Phase 4 — MusicXML Foundation
- Internal music model
- Pitch model
- Note model
- Measure model
- Part model
- Score model
- MusicXML parser
- MusicXML exporter
- MusicXML fixture
- MusicXML round-trip test
-Phase 5 — Transposition
- Transposition model
- Pitch transposition
- Chromatic transposition
- Instrument transposition
- Alto saxophone support
- Soprano saxophone support
- Transposition tests
-Phase 6 — Music Recognition
- File upload
- PDF processing
- Image processing
- OMR integration
- MusicXML generation
- Recognition validation
-Phase 7 — Export and Sharing
- MusicXML export
- PDF export
- Image export
- Sharing workflow
- Download workflow
-Phase 8 — Refinement
- UI improvements
- Error handling
- Performance optimization
- Security improvements
- Additional automated tests
- Deployment
- Mobile strategy
-Testing Strategy
 
-Testing will be implemented at multiple levels.
-
-Backend Unit Tests
-
-Test:
+In progress / foundation completed.
 
 Music models
-Pitch calculations
-Note handling
-Measure handling
-Transposition
-MusicXML parsing
-MusicXML exporting
-API Tests
+MusicXML parser
+MusicXML exporter
+Multiple measures
+Timing information
+Rests
+Round-trip tests
+Phase 5 — Transposition
 
-Test:
+Planned.
 
-HTTP status codes
-Request validation
-Response schemas
+Pitch transformation
+Interval handling
+Instrument transposition
+Transposed MusicXML
+Phase 6 — Recognition
+
+Planned.
+
+PDF processing
+Image processing
+OMR
+MusicXML generation
+Phase 7 — Export and Sharing
+
+Planned.
+
+PDF export
+Image export
+MusicXML export
+Sharing workflows
+Phase 8 — Refinement
+
+Planned.
+
+UI improvements
+Performance
 Error handling
-API versioning
-Frontend Tests
+Testing
+Security
+Mobile preparation
+Testing Strategy
+
+Testing will be expanded as functionality grows.
+
+Backend
+Unit tests
+API tests
+Music model tests
+Parser tests
+Exporter tests
+Round-trip tests
+Transposition tests
+Frontend
 
 Future tests will cover:
 
 Components
 Pages
-API integration
+API service behavior
 User interactions
-File upload
-Transposition controls
+Error states
+Music Processing
 
-Potential tools:
+Special attention will be given to preserving musical meaning during transformations.
 
-Vitest
-React Testing Library
-End-to-End Testing
+For example:
 
-Future end-to-end testing may cover:
-
-Upload
-  ↓
-Recognition
-  ↓
-View
-  ↓
-Transpose
-  ↓
-Export
+Input MusicXML
+      │
+      ▼
+    Parser
+      │
+      ▼
+Internal Model
+      │
+      ▼
+Transformation
+      │
+      ▼
+Internal Model
+      │
+      ▼
+   Exporter
+      │
+      ▼
+Output MusicXML
 Git Workflow
 
-The project uses Git for version control.
+The repository uses Git and GitHub.
 
-Check status:
+Remote repository:
 
-git status
+git@github.com:minhductrn/music-sheet-transposer.git
 
-Review changes:
+Main development branch:
 
-git diff
+master
 
-Stage changes:
+Development principles:
 
-git add .
-
-Commit:
-
-git commit -m "description of change"
-
-Push:
-
-git push origin master
-
-Before committing, verify:
-
-git status
-
-and run the relevant tests.
-
+Make small changes.
+Validate changes before committing.
+Keep commits focused.
+Avoid unrelated changes.
+Push stable checkpoints to GitHub.
+Keep generated files and secrets out of Git.
+Use clear commit messages.
 Development Principles
 
-The project follows several principles:
+The project follows these principles:
 
-1. Keep the architecture simple
+1. Separate UI from music processing
 
-Implement only what is needed for the current phase.
+The UI should not contain core music-processing logic.
 
-2. Separate UI from music processing
+2. Keep the internal model independent
 
-React should handle presentation and user interaction.
+Music processing should operate on the internal music model rather than directly manipulating UI components or raw XML whenever possible.
 
-The backend should handle music processing and business logic.
+3. Make small changes
 
-3. Keep the internal music model independent
+Each feature should be implemented incrementally and validated before moving to the next feature.
 
-MusicXML should not become the application's internal representation.
+4. Test musical behavior
 
-The internal model should be capable of supporting multiple input/output formats.
+Tests should verify musical meaning, not only XML syntax.
 
-4. Make small changes
+5. Preserve MusicXML semantics
 
-Each development step should introduce one logical feature.
+The parser and exporter should preserve information that affects musical interpretation.
 
-5. Test before moving forward
+6. Avoid premature complexity
 
-New functionality should have automated tests whenever practical.
+Only introduce additional architecture when it provides a clear benefit to the project.
 
-6. Avoid unnecessary dependencies
+7. Keep future mobile support in mind
 
-Add a dependency only when it provides clear value.
+The backend and core music-processing layer should remain reusable for a future mobile application.
 
-7. Protect configuration and secrets
+Current Checkpoint
 
-Never commit:
+The project has reached a stable Phase 4 MusicXML foundation.
 
-.env
-API keys
-Passwords
-Tokens
-Private credentials
+Current status:
+
+Backend                  ✅
+Frontend                 ✅
+Music Models             ✅
+MusicXML Parser          ✅
+MusicXML Exporter        ✅
+Multiple Measures        ✅
+Timing Information       ✅
+Notes and Rests          ✅
+Round-Trip Testing       ✅
+Backend Tests            ✅ 12 passed
+Frontend Build           ✅
+Frontend Lint            ✅
+
+The current next step is to improve MusicXML fidelity with:
+
+Dotted Notes
+     ↓
+Ties
+     ↓
+Expanded Rest Handling
+     ↓
+Changing Time Signatures
+     ↓
+Additional MusicXML Fidelity
+     ↓
+Transposition
+
+The project will continue to evolve incrementally from a reliable MusicXML foundation toward a complete sheet-music import, viewing, transposition, and export application.
