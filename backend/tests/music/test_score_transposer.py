@@ -151,3 +151,101 @@ def test_transpose_score_does_not_mutate_original() -> None:
     assert result_pitch is not None
     assert result_pitch.step == PitchStep.D
     assert result_pitch.octave == 4
+
+
+def test_transpose_score_uses_destination_flat_key_spelling() -> None:
+    score = Score(
+        title="Flat Key Test",
+        parts=[
+            Part(
+                id="P1",
+                name="Piano",
+                measures=[
+                    Measure(
+                        number=1,
+                        key_signature=KeySignature(
+                            fifths=-5,
+                            mode=KeyMode.MAJOR,
+                        ),
+                        notes=[
+                            Note(
+                                pitch=Pitch(
+                                    step=PitchStep.D,
+                                    octave=4,
+                                ),
+                                duration=1,
+                                note_type=NoteType.QUARTER,
+                            )
+                        ],
+                    )
+                ],
+            )
+        ],
+    )
+
+    result = transpose_score(score, 2)
+
+    measure = result.parts[0].measures[0]
+
+    assert measure.key_signature is not None
+
+    # Db major + 2 semitones = Eb major
+    assert measure.key_signature.fifths == -3
+    assert measure.key_signature.mode == KeyMode.MAJOR
+
+    note = measure.notes[0]
+
+    assert note.pitch is not None
+
+    # D4 + 2 semitones = E4
+    assert note.pitch.step == PitchStep.E
+    assert note.pitch.alter == 0.0
+    assert note.pitch.octave == 4
+
+
+def test_transpose_score_spells_enharmonic_note_for_flat_key() -> None:
+    score = Score(
+        title="Enharmonic Test",
+        parts=[
+            Part(
+                id="P1",
+                name="Piano",
+                measures=[
+                    Measure(
+                        number=1,
+                        key_signature=KeySignature(
+                            fifths=-5,
+                            mode=KeyMode.MAJOR,
+                        ),
+                        notes=[
+                            Note(
+                                pitch=Pitch(
+                                    step=PitchStep.C,
+                                    octave=4,
+                                    alter=1.0,
+                                ),
+                                duration=1,
+                                note_type=NoteType.QUARTER,
+                            )
+                        ],
+                    )
+                ],
+            )
+        ],
+    )
+
+    result = transpose_score(score, 2)
+
+    measure = result.parts[0].measures[0]
+
+    assert measure.key_signature is not None
+    assert measure.key_signature.fifths == -3
+
+    note = measure.notes[0]
+
+    assert note.pitch is not None
+
+    # C#4 + 2 semitones = Eb4 in an Eb-major context.
+    assert note.pitch.step == PitchStep.E
+    assert note.pitch.alter == -1.0
+    assert note.pitch.octave == 4

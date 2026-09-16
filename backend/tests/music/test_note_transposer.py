@@ -1,3 +1,4 @@
+from app.music.models.key_signature import KeyMode, KeySignature
 from app.music.models.note import Note, NoteType
 from app.music.models.pitch import Pitch, PitchStep
 from app.music.transposition.note_transposer import transpose_note
@@ -69,4 +70,58 @@ def test_transpose_note_does_not_mutate_original() -> None:
 
     assert result.pitch is not None
     assert result.pitch.step == PitchStep.D
+    assert result.pitch.octave == 4
+
+
+def test_transpose_note_uses_flat_key_spelling() -> None:
+    note = Note(
+        pitch=Pitch(
+            step=PitchStep.D,
+            octave=4,
+        ),
+        duration=1,
+        note_type=NoteType.QUARTER,
+    )
+
+    destination_key = KeySignature(
+        fifths=-3,
+        mode=KeyMode.MAJOR,
+    )
+
+    result = transpose_note(
+        note,
+        1,
+        destination_key,
+    )
+
+    assert result.pitch is not None
+    assert result.pitch.step == PitchStep.E
+    assert result.pitch.alter == -1.0
+    assert result.pitch.octave == 4
+
+
+def test_transpose_note_uses_sharp_key_spelling() -> None:
+    note = Note(
+        pitch=Pitch(
+            step=PitchStep.D,
+            octave=4,
+        ),
+        duration=1,
+        note_type=NoteType.QUARTER,
+    )
+
+    destination_key = KeySignature(
+        fifths=3,
+        mode=KeyMode.MAJOR,
+    )
+
+    result = transpose_note(
+        note,
+        1,
+        destination_key,
+    )
+
+    assert result.pitch is not None
+    assert result.pitch.step == PitchStep.D
+    assert result.pitch.alter == 1.0
     assert result.pitch.octave == 4

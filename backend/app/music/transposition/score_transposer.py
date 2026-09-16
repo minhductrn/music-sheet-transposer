@@ -16,11 +16,6 @@ def transpose_score(
         measures: list[Measure] = []
 
         for measure in part.measures:
-            notes = [
-                transpose_note(note, semitones)
-                for note in measure.notes
-            ]
-
             key_signature = (
                 transpose_key_signature(
                     measure.key_signature,
@@ -29,6 +24,15 @@ def transpose_score(
                 if measure.key_signature is not None
                 else None
             )
+
+            notes = [
+                transpose_note(
+                    note,
+                    semitones,
+                    key_signature,
+                )
+                for note in measure.notes
+            ]
 
             measures.append(
                 measure.model_copy(
