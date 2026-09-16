@@ -1,6 +1,7 @@
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
+from app.music.models.key_signature import KeyMode, KeySignature
 from app.music.models.measure import Measure
 from app.music.models.note import Note, NoteType
 from app.music.models.pitch import Pitch, PitchStep
@@ -40,6 +41,7 @@ def parse_musicxml(path: Path) -> Score:
             number = int(number_text)
 
             measure_divisions: int | None = None
+            measure_key_signature: KeySignature | None = None
             measure_time_signature: TimeSignature | None = None
 
             attributes_element = measure_element.find("attributes")
@@ -53,6 +55,24 @@ def parse_musicxml(path: Path) -> Score:
                 ):
                     current_divisions = int(divisions_element.text)
                     measure_divisions = current_divisions
+
+                key_element = attributes_element.find("key")
+
+                if key_element is not None:
+                    fifths_element = key_element.find("fifths")
+                    mode_element = key_element.find("mode")
+
+                    if fifths_element is not None and fifths_element.text:
+                        mode = (
+                            KeyMode(mode_element.text)
+                            if mode_element is not None and mode_element.text
+                            else KeyMode.MAJOR
+                        )
+
+                        measure_key_signature = KeySignature(
+                            fifths=int(fifths_element.text),
+                            mode=mode,
+                        )
 
                 time_element = attributes_element.find("time")
 
@@ -145,6 +165,7 @@ def parse_musicxml(path: Path) -> Score:
                 Measure(
                     number=number,
                     divisions=measure_divisions,
+                    key_signature=measure_key_signature,
                     time_signature=measure_time_signature,
                     notes=notes,
                 )

@@ -87,3 +87,26 @@ def test_parse_timing_information() -> None:
 
     assert measure_2.divisions is None
     assert measure_2.time_signature is None
+
+def test_parse_key_signature_defaults_to_major() -> None:
+    score = parse_musicxml(FIXTURE)
+
+    key_signature = score.parts[0].measures[0].key_signature
+
+    assert key_signature is not None
+    assert key_signature.fifths == 0
+    assert key_signature.mode.value == "major"
+
+
+def test_parse_minor_key_signature() -> None:
+    from app.music.models.key_signature import KeyMode
+
+    fixture = Path(__file__).parent / "fixtures" / "minor_key.musicxml"
+
+    score = parse_musicxml(fixture)
+
+    key_signature = score.parts[0].measures[0].key_signature
+
+    assert key_signature is not None
+    assert key_signature.fifths == -5
+    assert key_signature.mode == KeyMode.MINOR

@@ -29,6 +29,7 @@ def export_musicxml(score: Score, path: Path) -> None:
 
             if (
                 measure.divisions is not None
+                or measure.key_signature is not None
                 or measure.time_signature is not None
             ):
                 attributes = ET.SubElement(measure_element, "attributes")
@@ -37,6 +38,17 @@ def export_musicxml(score: Score, path: Path) -> None:
                     ET.SubElement(attributes, "divisions").text = str(
                         measure.divisions
                     )
+
+                if measure.key_signature is not None:
+                    key = ET.SubElement(attributes, "key")
+                    ET.SubElement(key, "fifths").text = str(
+                        measure.key_signature.fifths
+                    )
+
+                    if measure.key_signature.mode.value != "major":
+                        ET.SubElement(key, "mode").text = (
+                            measure.key_signature.mode.value
+                        )
 
                 if measure.time_signature is not None:
                     time = ET.SubElement(attributes, "time")

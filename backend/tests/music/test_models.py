@@ -101,3 +101,22 @@ def test_score_hierarchy() -> None:
     assert score.parts[0].measures[0].time_signature is not None
     assert score.parts[0].measures[0].time_signature.beats == 4
     assert score.parts[0].measures[0].time_signature.beat_type == 4
+
+def test_key_signature_model() -> None:
+    from app.music.models.key_signature import KeyMode, KeySignature
+
+    major_key = KeySignature(
+        fifths=-5,
+        mode=KeyMode.MAJOR,
+    )
+
+    minor_key = KeySignature(
+        fifths=-5,
+        mode=KeyMode.MINOR,
+    )
+
+    assert major_key.fifths == -5
+    assert major_key.mode == KeyMode.MAJOR
+
+    assert minor_key.fifths == -5
+    assert minor_key.mode == KeyMode.MINOR
