@@ -4,3 +4,5 @@ pytest
 httpx
 pydantic-settings
 python-multipart
+pypdf>=6,<7
+Pillow>=12,<13

@@ -1,14 +1,17 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { OpenSheetMusicDisplay } from 'opensheetmusicdisplay'
 
 interface MusicSheetViewerProps {
   musicXml: Blob | null
+  title?: string
 }
 
 export default function MusicSheetViewer({
   musicXml,
+  title = 'Transposed Sheet Music',
 }: MusicSheetViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const [failedXml, setFailedXml] = useState<Blob | null>(null)
 
   useEffect(() => {
     if (!musicXml || !containerRef.current) {
@@ -44,6 +47,7 @@ export default function MusicSheetViewer({
     }
 
     renderMusicSheet().catch((error) => {
+      if (!cancelled) setFailedXml(musicXmlBlob)
       console.error('Unable to render MusicXML:', error)
     })
 
@@ -58,7 +62,10 @@ export default function MusicSheetViewer({
 
   return (
     <div>
-      <h2>Transposed Sheet Music</h2>
+      <h2>{title}</h2>
+      {failedXml === musicXml && (
+        <p role="alert">Unable to preview this MusicXML. Recognition may have produced unsupported notation.</p>
+      )}
       <div ref={containerRef} />
     </div>
   )
