@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import MusicSheetViewer from '../components/MusicSheetViewer'
 import {
   getHealth,
   transposeMusicXml,
@@ -163,6 +164,8 @@ export default function Home() {
           </p>
         )}
       </div>
+
+      <MusicSheetViewer musicXml={result} />
     </section>
   )
 }

@@ -20,3 +20,6 @@ class Note(BaseModel):
     duration: int = Field(gt=0)
     note_type: NoteType | None = None
     is_rest: bool = False
+    staff: int = Field(default=1, gt=0)
+    is_chord: bool = False
+    voice: str | None = None

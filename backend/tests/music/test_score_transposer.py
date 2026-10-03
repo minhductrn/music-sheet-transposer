@@ -249,3 +249,98 @@ def test_transpose_score_spells_enharmonic_note_for_flat_key() -> None:
     assert note.pitch.step == PitchStep.E
     assert note.pitch.alter == -1.0
     assert note.pitch.octave == 4
+
+def test_transpose_score_preserves_timing_events() -> None:
+    from app.music.models.note import Note
+    from app.music.models.pitch import Pitch, PitchStep
+    from app.music.models.timing import Backup, Forward
+
+    first_note = Note(
+        pitch=Pitch(
+            step=PitchStep.C,
+            octave=4,
+        ),
+        duration=1,
+        voice="1",
+    )
+
+    second_note = Note(
+        pitch=Pitch(
+            step=PitchStep.E,
+            octave=4,
+        ),
+        duration=1,
+        voice="2",
+    )
+
+    measure = Measure(
+        number=1,
+        notes=[
+            first_note,
+            second_note,
+        ],
+        events=[
+            first_note,
+            Backup(duration=1),
+            second_note,
+            Forward(duration=2),
+        ],
+    )
+
+    score = Score(
+        parts=[
+            Part(
+                id="P1",
+                name="Piano",
+                measures=[measure],
+            )
+        ]
+    )
+
+    transposed = transpose_score(
+        score,
+        semitones=2,
+    )
+
+    result_measure = (
+        transposed.parts[0].measures[0]
+    )
+
+    assert len(result_measure.notes) == 2
+    assert len(result_measure.events) == 4
+
+    assert isinstance(
+        result_measure.events[0],
+        Note,
+    )
+    assert isinstance(
+        result_measure.events[1],
+        Backup,
+    )
+    assert isinstance(
+        result_measure.events[2],
+        Note,
+    )
+    assert isinstance(
+        result_measure.events[3],
+        Forward,
+    )
+
+    first_event = result_measure.events[0]
+    second_event = result_measure.events[2]
+
+    assert first_event.pitch is not None
+    assert second_event.pitch is not None
+
+    assert first_event.pitch.step == PitchStep.D
+    assert first_event.pitch.octave == 4
+
+    assert second_event.pitch.step == PitchStep.F
+    assert second_event.pitch.alter == 1.0
+    assert second_event.pitch.octave == 4
+
+    assert first_event.voice == "1"
+    assert second_event.voice == "2"
+
+    assert result_measure.events[1].duration == 1
+    assert result_measure.events[3].duration == 2

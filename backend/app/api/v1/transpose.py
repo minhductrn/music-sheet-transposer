@@ -1,11 +1,11 @@
-from pathlib import Path
-from tempfile import TemporaryDirectory
-
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
+from starlette.concurrency import run_in_threadpool
 
-from app.music.musicxml.exporter import export_musicxml
-from app.music.musicxml.parser import parse_musicxml
+from app.music.musicxml.transposer import (
+    MusicXMLTranspositionError,
+    transpose_musicxml_document,
+)
 from app.music.transposition.score_transposer import transpose_score
 from app.schemas.transposition import (
     TransposeRequest,
@@ -38,28 +38,13 @@ async def transpose_musicxml(
     file: UploadFile = File(...),
     semitones: int = Form(...),
 ) -> Response:
-    with TemporaryDirectory() as temp_dir:
-        temp_path = Path(temp_dir)
-
-        input_path = temp_path / "input.musicxml"
-        output_path = temp_path / "transposed.musicxml"
-
-        contents = await file.read()
-        input_path.write_bytes(contents)
-
-        score = parse_musicxml(input_path)
-
-        transposed_score = transpose_score(
-            score,
-            semitones,
+    contents = await file.read()
+    try:
+        output_contents = await run_in_threadpool(
+            transpose_musicxml_document, contents, semitones,
         )
-
-        export_musicxml(
-            transposed_score,
-            output_path,
-        )
-
-        output_contents = output_path.read_bytes()
+    except MusicXMLTranspositionError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
     return Response(
         content=output_contents,
