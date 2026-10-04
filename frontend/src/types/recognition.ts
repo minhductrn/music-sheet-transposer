@@ -12,6 +12,7 @@ export interface RecognitionIssue {
 
 export interface RecognitionResponse {
   musicxml_base64: string
+  baseline_musicxml_base64?: string | null
   provider: string
   profile: RecognitionProfile
   review_required: boolean
@@ -31,9 +32,12 @@ export interface RecognitionResponse {
     sha256: string
     data_base64: string
   } | null
+  semantic_evidence_artifact?: RecognitionResponse['omr_artifact']
 }
 
-export interface RecognitionResult extends Omit<RecognitionResponse, 'musicxml_base64' | 'omr_artifact'> {
+export interface RecognitionResult extends Omit<RecognitionResponse, 'musicxml_base64' | 'baseline_musicxml_base64' | 'omr_artifact' | 'semantic_evidence_artifact'> {
   musicXml: Blob
+  baselineMusicXml: Blob | null
   omrArtifact: Blob | null
+  semanticEvidenceArtifact: Blob | null
 }

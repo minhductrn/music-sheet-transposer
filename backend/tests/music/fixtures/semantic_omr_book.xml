@@ -1,0 +1,7 @@
+<book software-version="5.11.0" path="/private/original.pdf">
+  <sheet number="1">
+    <steps>LOAD BINARY SCALE GRID HEADS STEMS MEASURES CHORDS LINKS RHYTHMS PAGE</steps>
+    <page id="1"><system><part logical-id="1"/></system></page>
+  </sheet>
+  <score><logical-part id="1" staff-count="1"/><page sheet-number="1" sheet-page-id="1"/></score>
+</book>

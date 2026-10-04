@@ -110,14 +110,62 @@ class AudiverisProvider:
             self._check_output_path(scores[0], output_directory)
             musicxml = self._read_score(scores[0])
             omr, artifact_warnings = self._read_artifact(output_directory)
+            evidence_omr = None
+            if self.config.audiveris_semantic_recovery_enabled and self.config.audiveris_semantic_analysis_enabled:
+                try:
+                    evidence_omr = self._analyze(source, output_directory / "semantic-evidence", options, environment)
+                    if len(omr or b"") + len(evidence_omr or b"") > self.config.recognition_max_artifact_bytes:
+                        evidence_omr = None
+                        artifact_warnings += (RecognitionIssue("semantic_evidence_too_large", "Additional evidence exceeded the combined artifact limit."),)
+                except RecognitionError:
+                    # The optional analysis can never replace or invalidate baseline recognition.
+                    artifact_warnings += (RecognitionIssue("semantic_analysis_unavailable", "Optional small-head evidence was unavailable; baseline recognition was retained."),)
             return ProviderOutput(
                 musicxml, "Audiveris", omr, warnings + artifact_warnings,
                 {"input_quality": options.input_quality.value,
                  "ocr_languages": options.ocr_languages,
-                 "small_heads_enabled": False, "small_beams_enabled": False},
+                 "small_heads_enabled": False, "small_beams_enabled": False,
+                 "semantic_analysis_retained": evidence_omr is not None},
+                evidence_omr=evidence_omr,
             )
         except OSError as error:
             raise RecognitionError("Recognition produced an unreadable score.", 502) from error
+
+    def _analyze(self, source, directory, options, environment):
+        """Opt-in pre-rhythm evidence only. Never export from this analysis."""
+        directory.mkdir()
+        command = [self.config.audiveris_executable, "-batch", "-step", "LINKS", "-save"]
+        constants = options.constants()
+        for switch in ("smallHeads", "smallBeams"):
+            constants[f"org.audiveris.omr.sheet.ProcessingSwitches.{switch}"] = "true"
+        for key, value in constants.items():
+            command.extend(["-constant", f"{key}={value}"])
+        command.extend(["-output", str(directory), "--", str(source)])
+        environment = dict(environment)
+        for kind in ("CONFIG", "DATA", "CACHE"):
+            path = source.parent / "analysis-runtime" / kind.lower()
+            path.mkdir(parents=True, exist_ok=True)
+            environment[f"XDG_{kind}_HOME"] = str(path)
+        try:
+            process = subprocess.Popen(command, cwd=source.parent, stdout=subprocess.DEVNULL,
+                                       stderr=subprocess.DEVNULL, start_new_session=True, env=environment)
+            try:
+                code = process.wait(timeout=self.config.audiveris_semantic_analysis_timeout_seconds)
+            except subprocess.TimeoutExpired as error:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                process.wait()
+                raise RecognitionError("Semantic evidence analysis timed out.", 504) from error
+            if code != 0:
+                raise RecognitionError("Semantic evidence analysis failed.", 502)
+            artifact, _ = self._read_artifact(directory)
+            if artifact is None:
+                raise RecognitionError("Semantic evidence was not retained.", 502)
+            return artifact
+        except OSError as error:
+            raise RecognitionError("Semantic evidence analysis was unavailable.", 503) from error
 
     def _read_score(self, path: Path) -> bytes:
         limit = self.config.recognition_max_output_bytes

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <work><work-title>Preservation regression</work-title></work>
+  <identification><creator type="composer">Original composer</creator></identification>
+  <defaults><scaling><millimeters>7</millimeters><tenths>40</tenths></scaling></defaults>
+  <part-list><score-part id="P1"><part-name>Voice</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1" width="150">
+      <print new-system="yes"><system-layout><system-distance>80</system-distance></system-layout></print>
+      <attributes><divisions>2</divisions><key><fifths>0</fifths></key><time><beats>2</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes>
+      <direction><direction-type><dynamics><p/></dynamics></direction-type><sound tempo="92"/></direction>
+      <harmony><root><root-step>A</root-step></root><kind>minor</kind></harmony>
+      <!-- This unsupported notation and all ordinary events must survive. -->
+      <note default-x="50"><pitch><step>A</step><octave>4</octave></pitch><duration>2</duration><tie type="start"/><voice>1</voice><type>quarter</type><stem>up</stem><notations><tied type="start"/><slur number="1" type="start"/><articulations><accent/></articulations><other-notation type="single">original</other-notation></notations><lyric><text>Any text</text></lyric></note>
+      <note default-x="100"><rest/><duration>2</duration><voice>1</voice><type>quarter</type></note>
+      <barline><bar-style>light-heavy</bar-style></barline>
+    </measure>
+  </part>
+</score-partwise>

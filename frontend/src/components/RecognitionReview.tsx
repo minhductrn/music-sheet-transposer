@@ -135,6 +135,25 @@ export default function RecognitionReview({ review, onChange, onBusy, download }
       <button disabled={busy} onClick={() => void perform(async () => { await closeReview(review.id); return null })}>Close review</button>
     </div>
     {error && <p role="alert" className="status-error">{error}</p>}
+    {review.semantic_recovery && <details>
+      <summary>Recognition evidence: {review.semantic_recovery.auto_recovered} recovered · {review.semantic_recovery.review_candidates} need review</summary>
+      <p>These suggestions were recorded when the review opened. Compare their locations with the source before changing notes. Evidence does not establish musical correctness.</p>
+      <ul>{review.semantic_recovery.candidates.map((candidate) => <li key={candidate.id}>
+        <strong>{candidate.state.replaceAll('_', ' ')}</strong> · {candidate.classification.replaceAll('_', ' ')} · {candidate.confidence}
+        {candidate.pitch && ` · ${candidate.pitch.step}${candidate.pitch.alter === '-1' ? '♭' : candidate.pitch.alter === '1' ? '♯' : ''}${candidate.pitch.octave}`}
+        {` · page ${candidate.evidence.sheet}, staff ${candidate.evidence.staff_number ?? '?'}, head ${candidate.evidence.id}`}
+        {candidate.evidence.bounds && ` · source box ${candidate.evidence.bounds.join(', ')}`}
+        <p>{candidate.diagnostics.map((reason) => reason.replaceAll('_', ' ')).join('; ')}.</p>
+        <button disabled={busy || !measures.some(({ measure: m }) => m.voices.some((v) => v.events.some((e) => e.id === (candidate.event_id ?? candidate.anchor_id))))}
+          onClick={() => {
+            const id = candidate.event_id ?? candidate.anchor_id
+            const target = measures.find(({ measure: m }) => m.voices.some((v) => v.events.some((e) => e.id === id)))
+            const targetVoice = target?.measure.voices.find((v) => v.events.some((e) => e.id === id))
+            if (target && targetVoice && id) { setMeasureId(target.measure.id); setVoiceId(targetVoice.id); setEventId(id) }
+          }}>Select related event</button>
+      </li>)}</ul>
+      {review.semantic_recovery.diagnostics.length > 0 && <p>{review.semantic_recovery.diagnostics.map((reason) => reason.replaceAll('_', ' ')).join('; ')}.</p>}
+    </details>}
     <div className="review-comparison">
       <SourceViewer review={review} />
       <div className="review-score"><MusicSheetViewer musicXml={review.musicXml} title="Corrected score" selection={selection} /></div>

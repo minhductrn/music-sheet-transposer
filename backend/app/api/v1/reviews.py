@@ -55,12 +55,15 @@ async def read_upload(file, limit):
 @router.post("", status_code=201)
 async def create_review(
     musicxml: UploadFile = File(...), source: UploadFile | None = File(None),
+    omr: UploadFile | None = File(None), analysis_omr: UploadFile | None = File(None),
     service: ReviewService = Depends(get_review_service),
 ):
     try:
         xml = await read_upload(musicxml, service.config.recognition_max_output_bytes)
         original = await read_upload(source, service.config.recognition_max_upload_bytes) if source else None
-        payload = await call(service.create, xml, original, source.content_type if source else None)
+        evidence = await read_upload(omr, service.config.recognition_max_artifact_bytes) if omr else None
+        additional = await read_upload(analysis_omr, service.config.recognition_max_artifact_bytes) if analysis_omr else None
+        payload = await call(service.create, xml, original, source.content_type if source else None, evidence, additional)
         result = await response(payload)
         result.status_code = 201
         return result
@@ -68,6 +71,10 @@ async def create_review(
         await musicxml.close()
         if source:
             await source.close()
+        if omr:
+            await omr.close()
+        if analysis_omr:
+            await analysis_omr.close()
 
 
 @router.get("/{review_id}")

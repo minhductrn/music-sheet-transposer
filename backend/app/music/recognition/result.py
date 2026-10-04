@@ -27,6 +27,7 @@ class ProviderOutput:
     metadata: dict = field(default_factory=dict)
     symbolic: dict | None = None
     debug_artifacts: dict[str, bytes] = field(default_factory=dict)
+    evidence_omr: bytes | None = None
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,8 @@ class RecognitionResult:
     omr: bytes | None = None
     # Local benchmark only; omitted from HTTP payloads.
     debug_artifacts: dict[str, bytes] = field(default_factory=dict)
+    evidence_omr: bytes | None = None
+    baseline_musicxml: bytes | None = None
 
     def metadata(self) -> dict:
         return {
@@ -61,7 +64,13 @@ class RecognitionResult:
         return {
             **self.metadata(),
             "musicxml_base64": b64encode(self.musicxml).decode("ascii"),
+            "baseline_musicxml_base64": b64encode(self.baseline_musicxml).decode("ascii") if self.baseline_musicxml is not None else None,
             "omr_artifact": artifact,
+            "semantic_evidence_artifact": {
+                "filename": "semantic-evidence.omr", "media_type": "application/octet-stream",
+                "size_bytes": len(self.evidence_omr), "sha256": sha256(self.evidence_omr).hexdigest(),
+                "data_base64": b64encode(self.evidence_omr).decode("ascii"),
+            } if self.evidence_omr is not None else None,
         }
 
 

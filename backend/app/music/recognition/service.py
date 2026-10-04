@@ -18,6 +18,7 @@ from app.music.recognition.result import (
     ProviderOutput, RecognitionIssue, RecognitionResult, SymbolicRecognitionResult,
 )
 from app.music.recognition.validation import validate_musicxml
+from app.music.review.document import ReviewError
 
 
 _FORMATS = {
@@ -126,13 +127,37 @@ class MusicRecognitionService:
                 )
                 if result.omr is not None and len(result.omr) > self.config.recognition_max_artifact_bytes:
                     raise RecognitionError("Recognition artifact exceeds the size limit.", 502)
+                if len(result.omr or b"") + len(result.evidence_omr or b"") > self.config.recognition_max_artifact_bytes:
+                    raise RecognitionError("Recognition evidence exceeds the combined artifact size limit.", 502)
+                musicxml = result.musicxml
+                recovery_issues = ()
+                if result.provider == "Audiveris" and (result.omr is not None or result.evidence_omr is not None):
+                    from app.music.recovery.service import recover
+                    try:
+                        recovery = recover(musicxml, result.omr, self.config, analysis_omr=result.evidence_omr)
+                    except ReviewError:
+                        # Optional recovery limits cannot discard an otherwise valid baseline.
+                        diagnostics["semantic_recovery"] = {"state": "REVIEW_REQUIRED", "review_required": True,
+                                                            "candidates": [], "diagnostics": ["semantic_projection_unavailable"]}
+                        recovery_issues = (RecognitionIssue("semantic_projection_unavailable", "Semantic projection exceeded its bounds; baseline XML was retained."),)
+                    else:
+                        musicxml = recovery.document.xml()
+                        diagnostics["semantic_recovery"] = recovery.report
+                        if recovery.report["auto_recovered"]:
+                            diagnostics, validation_issues = validate_musicxml(
+                                musicxml, expect_lyrics=options.lyrics, max_issues=self.config.recognition_max_diagnostics,
+                            )
+                            diagnostics["semantic_recovery"] = recovery.report
+                        if recovery.report["review_required"]:
+                            recovery_issues = (RecognitionIssue("semantic_recovery_review_required", "Semantic evidence needs source comparison in the recognition review."),)
                 diagnostics["provider_metadata"] = result.metadata
                 diagnostics["artifact_retained"] = result.omr is not None
                 diagnostics["source"] = source_metadata
                 return RecognitionResult(
-                    result.musicxml, result.provider, options.profile,
-                    result.warnings + validation_issues, diagnostics, omr=result.omr,
-                    debug_artifacts=result.debug_artifacts,
+                    musicxml, result.provider, options.profile,
+                    result.warnings + validation_issues + recovery_issues, diagnostics, omr=result.omr,
+                    debug_artifacts=result.debug_artifacts, evidence_omr=result.evidence_omr,
+                    baseline_musicxml=result.musicxml if musicxml != result.musicxml else None,
                 )
         except OSError as error:
             raise RecognitionError("Recognition temporary storage is unavailable.", 503) from error

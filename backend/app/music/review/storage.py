@@ -1,6 +1,7 @@
 """Replaceable, bounded local storage. IDs are capabilities, never paths."""
 
 from dataclasses import dataclass, field
+import json
 from threading import RLock
 import time
 from typing import Protocol
@@ -27,10 +28,12 @@ class ReviewSession:
     sequence: int = 0
     undo: list[Document] = field(default_factory=list)
     redo: list[Document] = field(default_factory=list)
+    semantic_recovery: dict | None = None
 
     def weight(self):
         return (self.document.weight() + (len(self.source.contents) if self.source else 0)
-                + sum(d.weight() for d in self.undo + self.redo))
+                + sum(d.weight() for d in self.undo + self.redo)
+                + (len(json.dumps(self.semantic_recovery).encode()) * 2 if self.semantic_recovery is not None else 0))
 
 
 class ReviewStore(Protocol):

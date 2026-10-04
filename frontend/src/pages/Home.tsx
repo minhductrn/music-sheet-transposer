@@ -57,7 +57,7 @@ export default function Home() {
       setReview(null)
       const draft = await recognizeSheetMusic(file, profile, inputQuality || undefined)
       setRecognized(draft)
-      setReview(await createReview(draft.musicXml, file))
+      setReview(await createReview(draft.baselineMusicXml ?? draft.musicXml, file, draft.omrArtifact, draft.semanticEvidenceArtifact))
       setRecognitionState('success')
     } catch (error) {
       setRecognitionError(error instanceof Error ? error.message : 'Recognition failed.')

@@ -36,6 +36,13 @@ class Settings(BaseSettings):
     )
     audiveris_tessdata_path: Path | None = None
     audiveris_input_quality: Literal["Synthetic", "Standard", "Poor"] | None = None
+    audiveris_semantic_recovery_enabled: bool = True
+    # Optional evidence pass only; production recognition keeps small heads/beams off.
+    audiveris_semantic_analysis_enabled: bool = False
+    audiveris_semantic_analysis_timeout_seconds: int = Field(default=120, gt=0)
+    semantic_max_expanded_bytes: int = Field(default=64 * 1024 * 1024, gt=0)
+    semantic_max_xml_nodes: int = Field(default=200_000, gt=0)
+    semantic_max_candidates: int = Field(default=128, gt=0, le=1000)
     recognition_max_artifact_bytes: int = Field(default=20 * 1024 * 1024, gt=0)
     recognition_max_log_bytes: int = Field(default=128 * 1024, gt=0)
     recognition_max_diagnostics: int = Field(default=100, gt=0, le=500)

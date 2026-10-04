@@ -1,0 +1,47 @@
+<sheet last-persistent-id="42">
+  <picture width="500" height="300"/>
+  <scale><interline main="20"/><black-head mean-width="24" mean-height="20"/></scale>
+  <page id="1" measure-count="1">
+    <system id="1">
+      <stack id="1" left="100" right="400" expected="1/2" duration="1/2">
+        <slot id="1" x-offset="112" time-offset="0"/>
+      </stack>
+      <part id="1">
+        <staff id="7" left="100" right="400">
+          <lines>
+            <line><point x="100" y="60"/><point x="400" y="60"/></line>
+            <line><point x="100" y="80"/><point x="400" y="80"/></line>
+            <line><point x="100" y="100"/><point x="400" y="100"/></line>
+            <line><point x="100" y="120"/><point x="400" y="120"/></line>
+            <line><point x="100" y="140"/><point x="400" y="140"/></line>
+          </lines>
+        </staff>
+        <measure id="1"><head-chords>20</head-chords>
+          <voice id="1"><slots><entry><key>1</key><value chord="20" status="BEGIN"/></entry></slots></voice>
+        </measure>
+      </part>
+      <sig>
+        <inters>
+          <clef id="1" kind="TREBLE" staff="7"><bounds x="100" y="60" w="10" h="80"/></clef>
+          <head id="10" staff="7" pitch="1" shape="NOTEHEAD_BLACK" grade="0.9" ctx-grade="0.95">
+            <bounds x="200" y="100" w="24" h="20"/>
+          </head>
+          <head id="11" staff="7" pitch="-1" shape="NOTEHEAD_BLACK_SMALL" grade="0.9" ctx-grade="0.95">
+            <bounds x="202" y="84" w="14" h="12"/>
+          </head>
+          <head-chord id="20" staff="7" grade="0.95"><bounds x="200" y="40" w="24" h="80"/></head-chord>
+          <stem id="30" shape="STEM"><bounds x="221" y="40" w="2" h="80"/></stem>
+          <beam id="40" shape="BEAM"><bounds x="221" y="40" w="40" h="6"/></beam>
+        </inters>
+        <relations>
+          <relation source="20" target="10"><containment/></relation>
+          <relation source="20" target="11"><containment/></relation>
+          <relation source="20" target="30"><chord-stem/></relation>
+          <relation source="10" target="30"><head-stem grade="0.95"/></relation>
+          <relation source="11" target="30"><head-stem grade="0.95"/></relation>
+          <relation source="40" target="30"><beam-stem grade="0.95"/></relation>
+        </relations>
+      </sig>
+    </system>
+  </page>
+</sheet>

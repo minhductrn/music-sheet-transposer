@@ -7,6 +7,33 @@ export interface Pitch {
   octave: number
 }
 
+export interface SemanticRecovery {
+  state: 'AUTO_RECOVERED' | 'REVIEW_REQUIRED' | 'NO_RECOVERY'
+  auto_recovered: number
+  review_candidates: number
+  diagnostics: string[]
+  candidates: {
+    id: string
+    operation: string | null
+    classification: 'GRACE' | 'CUE' | 'SIMULTANEOUS_VARIANT' | 'UNCERTAIN'
+    confidence: 'EXACT' | 'HIGH' | 'AMBIGUOUS' | 'UNMATCHED'
+    state: 'AUTO_RECOVERED' | 'REVIEW_REQUIRED' | 'NO_RECOVERY'
+    measure_id: string | null
+    event_id: string | null
+    anchor_id: string | null
+    pitch: Pitch | null
+    diagnostics: string[]
+    evidence: {
+      id: string
+      sheet: number
+      staff_number: number | null
+      bounds: [number, number, number, number] | null
+      shape: string
+      visual_size: string
+    }
+  }[]
+}
+
 export interface ScoreEvent {
   id: string
   kind: 'note' | 'rest' | 'unpitched'
@@ -79,6 +106,7 @@ export interface ReviewPayload {
   can_undo: boolean
   can_redo: boolean
   source: { media_type: string; pages: number } | null
+  semantic_recovery?: SemanticRecovery | null
   musicxml_base64: string
 }
 

@@ -8,7 +8,7 @@ from xml.etree import ElementTree as ET
 from app.core.config import Settings
 from app.music.review.document import Document, ReviewError
 from app.music.review.importer import import_score
-from app.music.review.models import EventAdd, EventPatch, HarmonyAdd, HarmonyPatch, LyricAdd, TextPatch
+from app.music.review.models import Diagnostic, EventAdd, EventPatch, HarmonyAdd, HarmonyPatch, LyricAdd, TextPatch
 from app.music.review.patcher import (
     add_event, delete_event, group, patch_event, patch_harmony, patch_lyric, patch_title, put,
 )
@@ -20,19 +20,31 @@ class ReviewService:
     def __init__(self, store: ReviewStore, config: Settings, clock):
         self.store, self.config, self.clock = store, config, clock
 
-    def create(self, xml: bytes, source: bytes | None = None, source_mime: str | None = None):
+    def create(self, xml: bytes, source: bytes | None = None, source_mime: str | None = None,
+               omr: bytes | None = None, analysis_omr: bytes | None = None):
         if not xml or len(xml) > self.config.recognition_max_output_bytes:
             raise ReviewError("Review MusicXML is empty or exceeds the size limit.", 413)
         document = Document.parse(xml, self.config.review_max_xml_nodes)
+        baseline = document
+        recovery_report = None
+        if omr is not None or analysis_omr is not None:
+            if len(omr or b"") + len(analysis_omr or b"") > self.config.recognition_max_artifact_bytes:
+                raise ReviewError("Review evidence exceeds the combined artifact size limit.", 413)
+            from app.music.recovery.service import recover
+            recovery = recover(xml, omr, self.config, analysis_omr=analysis_omr)
+            document, recovery_report = recovery.document, recovery.report
         retained = prepare_source(source, source_mime or "", self.config) if source is not None else None
         session = ReviewSession(secrets.token_urlsafe(24), document, retained,
-                                self.clock() + self.config.review_lifetime_seconds)
+                                self.clock() + self.config.review_lifetime_seconds,
+                                state="REVIEW_REQUIRED" if recovery_report and (recovery_report["review_required"] or recovery_report["auto_recovered"]) else "DRAFT",
+                                undo=self._history([baseline]) if recovery_report and recovery_report["auto_recovered"] else [],
+                                semantic_recovery=recovery_report)
         with self.store.lock:
             self.store.put(session)
             return self.payload(session)
 
     def payload(self, session):
-        score, issues = import_score(session.document)
+        score, issues = self._projection(session)
         errors = sum(i.severity == "ERROR" for i in issues)
         return {"id": session.id, "revision": session.revision, "state": session.state,
                 "expires_at": session.expires_at, "score": asdict(score),
@@ -40,8 +52,20 @@ class ReviewService:
                                "warning_count": sum(i.severity == "WARNING" for i in issues),
                                "diagnostics": [asdict(i) for i in issues[:500]], "truncated": len(issues) > 500},
                 "can_undo": bool(session.undo), "can_redo": bool(session.redo),
+                "semantic_recovery": session.semantic_recovery,
                 "source": {"media_type": session.source.media_type, "pages": session.source.pages} if session.source else None,
                 "musicxml_base64": b64encode(session.document.xml()).decode("ascii")}
+
+    def _projection(self, session):
+        score, issues = import_score(session.document)
+        if session.semantic_recovery is not None:
+            from app.music.recovery.musicxml import XmlContext, rhythm
+            for mid, validation in rhythm(XmlContext(session.document)).items():
+                for issue in validation["diagnostics"]:
+                    if issue["code"] in ("voice_overlap", "measure_overfilled", "voice_underfilled"):
+                        issues.append(Diagnostic(issue["code"], issue["code"].replace("_", " ").capitalize() + "; compare with the source.",
+                                                 issue["severity"], mid, issue["event_id"]))
+        return score, issues
 
     def get(self, identifier):
         with self.store.lock:
@@ -138,7 +162,7 @@ class ReviewService:
     def verify(self, identifier, revision):
         with self.store.lock:
             session = self._session(identifier, revision)
-            _, issues = import_score(session.document)
+            _, issues = self._projection(session)
             if any(issue.severity == "ERROR" for issue in issues):
                 raise ReviewError("Correct all validation errors before marking this review VERIFIED.", 409)
             updated = replace(session, state="VERIFIED", revision=session.revision + 1)

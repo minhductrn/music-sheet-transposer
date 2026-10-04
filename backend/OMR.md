@@ -18,6 +18,12 @@ SMT retains native symbolic evidence; it does not produce guessed MusicXML or
 change this production flow. See [SMT.md](SMT.md) for pinned source/model setup,
 dependency isolation, crop inspection and the completed Phase 4D.1 benchmark decision.
 
+Phase 4D.2 adds [Audiveris semantic recovery](SEMANTIC_RECOVERY.md) from retained
+`.omr` evidence and baseline MusicXML. Only corroborated high-confidence changes
+are patched; uncertainty appears in the existing review. Production small-head
+switches remain off. A bounded pre-rhythm evidence pass is opt-in and never replaces
+the normal export or changes Vietnamese OCR.
+
 ## Install Audiveris outside the virtual environment
 
 For WSL Ubuntu x86_64, use the official Linux Ubuntu x86_64 `.deb` from the

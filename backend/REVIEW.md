@@ -8,6 +8,12 @@ The recognition provider, compressed-MXL boundary, preservation transposer, old
 internal models/parser/exporter and both transposition endpoints remain unchanged.
 No recognition pass runs when an event or text object is corrected.
 
+Phase 4D.2 adds [Audiveris semantic recovery](SEMANTIC_RECOVERY.md) before review.
+Optional `omr`/`analysis_omr` uploads populate candidate evidence in this same session.
+Automatic recovery preserves the original MusicXML and can be undone; ambiguous
+candidates select related events for explicit correction. Candidate evidence records
+the import, while current rhythm is checked again during validation/verification.
+
 ## Model and preservation boundary
 
 `app/music/review/` is a separate correction layer:
