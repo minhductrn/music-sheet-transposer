@@ -20,11 +20,13 @@ class RecognitionIssue:
 
 @dataclass(frozen=True)
 class ProviderOutput:
-    musicxml: bytes
+    musicxml: bytes | None
     provider: str
     omr: bytes | None = None
     warnings: tuple[RecognitionIssue, ...] = ()
     metadata: dict = field(default_factory=dict)
+    symbolic: dict | None = None
+    debug_artifacts: dict[str, bytes] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -37,6 +39,8 @@ class RecognitionResult:
     # Structural checks cannot establish OMR accuracy against the source image.
     review_required: bool = True
     omr: bytes | None = None
+    # Local benchmark only; omitted from HTTP payloads.
+    debug_artifacts: dict[str, bytes] = field(default_factory=dict)
 
     def metadata(self) -> dict:
         return {
@@ -59,3 +63,15 @@ class RecognitionResult:
             "musicxml_base64": b64encode(self.musicxml).decode("ascii"),
             "omr_artifact": artifact,
         }
+
+
+@dataclass(frozen=True)
+class SymbolicRecognitionResult:
+    """Native symbolic evidence; deliberately has no fabricated MusicXML."""
+
+    provider: str
+    profile: RecognitionProfile
+    symbolic: dict
+    warnings: tuple[RecognitionIssue, ...]
+    diagnostics: dict
+    debug_artifacts: dict[str, bytes] = field(default_factory=dict)

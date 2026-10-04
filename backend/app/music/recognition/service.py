@@ -1,10 +1,10 @@
 """Provider-independent recognition orchestration and upload safeguards."""
 
 from io import BytesIO
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import BoundedSemaphore
-from typing import Protocol
 import warnings
 
 from PIL import Image, ImageOps, UnidentifiedImageError
@@ -13,13 +13,11 @@ from pypdf import PdfReader
 from app.core.config import Settings
 from app.music.recognition.errors import RecognitionError
 from app.music.recognition.profiles import InputQuality, RecognitionProfile, resolve_profile
-from app.music.recognition.result import ProviderOutput, RecognitionIssue, RecognitionResult
+from app.music.recognition.provider import MusicRecognitionProvider
+from app.music.recognition.result import (
+    ProviderOutput, RecognitionIssue, RecognitionResult, SymbolicRecognitionResult,
+)
 from app.music.recognition.validation import validate_musicxml
-
-
-class MusicRecognitionProvider(Protocol):
-    def recognize(self, source: Path, output_directory: Path) -> bytes:
-        """Return uncompressed MusicXML; failures raise RecognitionError."""
 
 
 _FORMATS = {
@@ -46,6 +44,21 @@ class MusicRecognitionService:
         self, contents: bytes, filename: str, mime: str | None,
         profile: RecognitionProfile | None = None, input_quality: InputQuality | None = None,
     ) -> RecognitionResult:
+        result = self.evaluate_result(contents, filename, mime, profile, input_quality)
+        if isinstance(result, SymbolicRecognitionResult):
+            raise RecognitionError(
+                "This provider produces symbolic benchmark evidence, not MusicXML. "
+                "Use the local recognition benchmark CLI.", 422, (
+                    RecognitionIssue("musicxml_unavailable", "No reliable MusicXML conversion is implemented.", "error"),
+                ),
+            )
+        return result
+
+    def evaluate_result(
+        self, contents: bytes, filename: str, mime: str | None,
+        profile: RecognitionProfile | None = None, input_quality: InputQuality | None = None,
+    ) -> RecognitionResult | SymbolicRecognitionResult:
+        """Common upload safeguards for production XML and native benchmarks."""
         options = resolve_profile(self.config, profile, input_quality)
         suffix = Path(filename).suffix.lower()
         if suffix not in _FORMATS:
@@ -66,8 +79,14 @@ class MusicRecognitionService:
                 if image_format is None:
                     self._validate_pdf(contents)
                     source.write_bytes(contents)
+                    source_metadata = {"format": "PDF"}
                 else:
                     source = self._prepare_image(contents, image_format, workspace)
+                    with Image.open(BytesIO(contents)) as image:
+                        source_metadata = {
+                            "format": image_format, "original_dimensions": list(image.size),
+                            "exif_orientation": image.getexif().get(274, 1),
+                        }
                 output = workspace / "output"
                 output.mkdir()
                 try:
@@ -81,6 +100,22 @@ class MusicRecognitionService:
                     raise
                 except Exception as error:
                     raise RecognitionError("The recognition provider failed. Try again later.", 502) from error
+                if sum(len(data) for data in result.debug_artifacts.values()) > self.config.recognition_max_artifact_bytes:
+                    raise RecognitionError("Recognition debug artifacts exceed the size limit.", 502)
+                if result.symbolic is not None:
+                    if result.musicxml is not None:
+                        raise RecognitionError("The provider returned ambiguous output formats.", 502)
+                    try:
+                        serialized = json.dumps(result.symbolic, allow_nan=False).encode()
+                    except (TypeError, ValueError) as error:
+                        raise RecognitionError("Recognition returned invalid symbolic output.", 502) from error
+                    if len(serialized) > self.config.recognition_max_output_bytes:
+                        raise RecognitionError("Recognition symbolic output exceeds the size limit.", 502)
+                    return SymbolicRecognitionResult(
+                        result.provider, options.profile, result.symbolic, result.warnings,
+                        {"provider_metadata": result.metadata, "source": source_metadata},
+                        result.debug_artifacts,
+                    )
                 if not result.musicxml or len(result.musicxml) > self.config.recognition_max_output_bytes:
                     raise RecognitionError("Recognition produced empty or oversized MusicXML.", 502, (
                         RecognitionIssue("invalid_output_size", "Recognition output was empty or exceeded the size limit.", "error"),
@@ -93,9 +128,11 @@ class MusicRecognitionService:
                     raise RecognitionError("Recognition artifact exceeds the size limit.", 502)
                 diagnostics["provider_metadata"] = result.metadata
                 diagnostics["artifact_retained"] = result.omr is not None
+                diagnostics["source"] = source_metadata
                 return RecognitionResult(
                     result.musicxml, result.provider, options.profile,
                     result.warnings + validation_issues, diagnostics, omr=result.omr,
+                    debug_artifacts=result.debug_artifacts,
                 )
         except OSError as error:
             raise RecognitionError("Recognition temporary storage is unavailable.", 503) from error

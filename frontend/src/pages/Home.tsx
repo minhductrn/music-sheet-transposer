@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react'
 import MusicSheetViewer from '../components/MusicSheetViewer'
+import RecognitionReview from '../components/RecognitionReview'
 import {
+  closeReview,
+  createReview,
   getHealth,
+  getVerifiedMusicXml,
   recognizeSheetMusic,
   transposeMusicXml,
 } from '../services/api'
 import type { InputQuality, RecognitionProfile, RecognitionResult } from '../types/recognition'
+import type { ReviewSession } from '../types/review'
 
 type ConnectionState = 'loading' | 'success' | 'error'
 type TransposeState = 'idle' | 'processing' | 'success' | 'error'
@@ -25,10 +30,14 @@ export default function Home() {
   const [recognitionState, setRecognitionState] =
     useState<'idle' | 'recognizing' | 'success' | 'error'>('idle')
   const [recognitionError, setRecognitionError] = useState('')
+  const [review, setReview] = useState<ReviewSession | null>(null)
+  const [reviewBusy, setReviewBusy] = useState(false)
   const isMusicXml = file ? /\.(musicxml|xml)$/i.test(file.name) : false
-  const busy = recognitionState === 'recognizing' || transposeState === 'processing'
+  const busy = recognitionState === 'recognizing' || transposeState === 'processing' || reviewBusy
 
   function clearRecognition() {
+    if (review) void closeReview(review.id).catch(() => { /* Server expiry also releases abandoned sessions. */ })
+    setReview(null)
     setRecognized(null)
     setResult(null)
     setRecognitionState('idle')
@@ -44,7 +53,11 @@ export default function Home() {
     setResult(null)
     setTransposeState('idle')
     try {
-      setRecognized(await recognizeSheetMusic(file, profile, inputQuality || undefined))
+      if (review) await closeReview(review.id)
+      setReview(null)
+      const draft = await recognizeSheetMusic(file, profile, inputQuality || undefined)
+      setRecognized(draft)
+      setReview(await createReview(draft.musicXml, file))
       setRecognitionState('success')
     } catch (error) {
       setRecognitionError(error instanceof Error ? error.message : 'Recognition failed.')
@@ -72,16 +85,15 @@ export default function Home() {
   }, [])
 
   async function handleTranspose() {
-    const inputFile = isMusicXml ? file : recognized
-      ? new File([recognized.musicXml], 'recognized.musicxml', {
-        type: 'application/vnd.recordare.musicxml+xml',
-      }) : null
-    if (!inputFile || busy) return
+    if (!file || busy || (!isMusicXml && review?.state !== 'VERIFIED')) return
 
     setTransposeState('processing')
     setResult(null)
 
     try {
+      const inputFile = isMusicXml ? file : new File([await getVerifiedMusicXml(review!.id)], 'verified.musicxml', {
+        type: 'application/vnd.recordare.musicxml+xml',
+      })
       const transposedFile = await transposeMusicXml(
         inputFile,
         semitones,
@@ -138,7 +150,7 @@ export default function Home() {
         <h2>Import Sheet Music</h2>
 
         <p>
-          Select MusicXML, PDF, PNG, JPEG or WEBP. Recognize PDF/images before transposing.
+          Select MusicXML, PDF, PNG, JPEG or WEBP. Recognize, review and verify PDF/images before transposing.
         </p>
 
         <input
@@ -184,7 +196,7 @@ export default function Home() {
             </button>
           </>
         )}
-        {recognitionState === 'error' && <p role="alert" className="status-error">{recognitionError}</p>}
+        {recognitionError && <p role="alert" className="status-error">{recognitionError}</p>}
 
         <div>
           <label htmlFor="semitones">
@@ -207,13 +219,14 @@ export default function Home() {
 
         <button
           type="button"
-          disabled={!file || busy || (!isMusicXml && !recognized) || !Number.isInteger(semitones)}
+          disabled={!file || busy || (!isMusicXml && review?.state !== 'VERIFIED') || !Number.isInteger(semitones)}
           onClick={handleTranspose}
         >
           {transposeState === 'processing'
             ? 'Transposing…'
             : 'Transpose'}
         </button>
+        {recognized && review?.state !== 'VERIFIED' && <p>Review and mark the corrected score VERIFIED to enable transposition.</p>}
 
         {transposeState === 'success' && (
           <>
@@ -240,11 +253,11 @@ export default function Home() {
 
       {recognized && (
         <div className="status-card">
-          <h2>Recognized Sheet Music</h2>
+          <h2>Recognition draft</h2>
           <dl>
             <dt>Recognition profile</dt><dd>{recognized.profile.replaceAll('_', ' ')}</dd>
             <dt>Provider</dt><dd>{recognized.provider}</dd>
-            <dt>Review status</dt><dd>{recognized.review_required ? 'Review required' : 'No review flags'}</dd>
+            <dt>Review status</dt><dd>DRAFT — review required</dd>
           </dl>
           {recognized.review_required && (
             <p role="status">Compare pitches, note sizes, rhythms, and lyrics with the original before transposing.</p>
@@ -262,16 +275,30 @@ export default function Home() {
             </details>
           )}
           <button type="button" onClick={() => download(recognized.musicXml, 'recognized.musicxml')}>
-            Download Recognized MusicXML
+            Download Original Draft MusicXML
           </button>
           {recognized.omrArtifact && (
             <button type="button" onClick={() => recognized.omrArtifact && download(recognized.omrArtifact, 'recognized.omr')}>
               Download Audiveris Project
             </button>
           )}
+          {!review && file && <button type="button" disabled={busy} onClick={async () => {
+            setReviewBusy(true)
+            setRecognitionError('')
+            try { setReview(await createReview(recognized.musicXml, file)) }
+            catch (error) { setRecognitionError(error instanceof Error ? error.message : 'Unable to open review.') }
+            finally { setReviewBusy(false) }
+          }}>Open Recognition Review</button>}
         </div>
       )}
-      <MusicSheetViewer musicXml={result ?? recognized?.musicXml ?? null} title={result ? 'Transposed Sheet Music' : 'Recognition Preview'} />
+      {review && <fieldset className="review-access" disabled={busy}>
+        <RecognitionReview review={review} onBusy={setReviewBusy} download={download} onChange={(updated) => {
+          setReview(updated)
+          setResult(null)
+          setTransposeState('idle')
+        }} />
+      </fieldset>}
+      {result && <MusicSheetViewer musicXml={result} />}
     </section>
   )
 }

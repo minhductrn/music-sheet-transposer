@@ -6,13 +6,13 @@ from fastapi.responses import JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
-from app.music.recognition.audiveris import AudiverisProvider
+from app.music.recognition.provider import create_provider
 from app.music.recognition.service import MusicRecognitionService, RecognitionError
 from app.music.recognition.profiles import InputQuality, RecognitionProfile
 
 
 router = APIRouter()
-_service = MusicRecognitionService(AudiverisProvider(settings), settings)
+_service = MusicRecognitionService(create_provider(settings), settings)
 
 
 def get_recognition_service() -> MusicRecognitionService:

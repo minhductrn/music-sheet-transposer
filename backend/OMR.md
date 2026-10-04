@@ -1,13 +1,22 @@
-# Phase 4C: Audiveris recognition and review
+# Phase 4C/4D: Audiveris recognition and review
 
 PDF/image → validated upload → recognition profile → Audiveris subprocess →
 retain bounded OMR artifact + decode MusicXML → structural/timing validation →
-OSMD preview and review → existing preservation-based transposition.
+draft → [Recognition Review & Correction](REVIEW.md) → explicit verification →
+existing preservation-based transposition.
 
 Audiveris remains the only production OMR provider. Java/native dependencies stay
 outside Python. No paid service, automatic language download, or guessed musical
 repair is part of this workflow. The preservation transposer, internal music models,
 parser/exporter, JSON transpose API, and MusicXML transpose API are unchanged.
+
+Phase 4D.1 retains SMT as **EXPERIMENTAL / BENCHMARK ONLY**, with an isolated worker
+and a local two-engine benchmark CLI. It is disabled by default (`SMT_ENABLED=false`);
+benchmark/development use requires explicit `SMT_ENABLED=true`. Audiveris remains
+the production default (`RECOGNITION_PROVIDER=audiveris`), with no SMT fallback.
+SMT retains native symbolic evidence; it does not produce guessed MusicXML or
+change this production flow. See [SMT.md](SMT.md) for pinned source/model setup,
+dependency isolation, crop inspection and the completed Phase 4D.1 benchmark decision.
 
 ## Install Audiveris outside the virtual environment
 
@@ -128,16 +137,17 @@ The artifact has a fixed download filename, size, SHA-256, media type, and
 Errors retain a string `detail` for existing clients and add structured `diagnostics`.
 Responses use `Cache-Control: no-store`.
 
-The frontend requests JSON, shows Recognized Sheet Music, provider/profile/review
-status and diagnostic messages, retains OSMD, and offers MusicXML/OMR downloads.
-Transposition submits the recognized MusicXML bytes to the existing endpoint.
+The frontend requests JSON, shows the recognition draft and provider/profile
+diagnostics, and offers original MusicXML/OMR downloads. Phase 4D automatically
+opens a source comparison and correction session. Transposition submits only the
+explicitly VERIFIED corrected MusicXML bytes to the existing endpoint.
 
 An `.omr` is Audiveris's editable project with images and recognition interpretations;
 MusicXML is the exported musical document and can omit interpretations. One bounded
 OMR project is read into memory before workspace cleanup. Missing/multiple/oversized
 projects generate a warning; unsafe output paths fail recognition. Artifacts are
 available only in the current response/browser session unless downloaded. There is
-no permanent server artifact store, public directory, correction endpoint, or automatic
+no permanent server OMR artifact store, public directory, OMR correction endpoint, or automatic
 reprocessing. Downloaded OMR is opaque provider data and may contain its original
 temporary input reference; source PDFs should also be retained for future full reruns.
 
@@ -191,13 +201,13 @@ and treat linked small chords as grace material. Therefore these switches are no
 globally enabled. A small head is not evidence of grace timing. OSMD cannot restore
 size/pitches/onsets absent from the export; CSS/global note scaling cannot fix this.
 
-A future selective-size correction must preserve pitch, octave, exact onset and
-duration, voice, staff, chord membership, shared stem/beam and ties while storing
-visual size independently. The extension boundary is the retained OMR plus original
-MusicXML in `RecognitionResult`; corrections should be explicit, reviewable edits
-before transposition. No automatic reconstruction or notation editor is implemented.
-Mixed-size simultaneous chord rendering must be tested separately in OSMD 2.1.2;
-its cue rendering selects scaling using the first graphical chord note.
+Phase 4D now provides explicit selective-size corrections in a preserved XML review
+session: pitch, onset/duration, voice, staff, chord membership and visual size stay
+independent of grace timing. Original XML and source are retained during review.
+There is no automatic reconstruction. OSMD 2.1.2 still selects cue scaling using the
+first graphical chord note, so independent mixed-size rendering remains limited.
+See [REVIEW.md](REVIEW.md) for correction APIs, verification, retention/history
+limits and the exact benchmark acceptance workflow.
 
 ## Settings
 
@@ -253,8 +263,10 @@ cd backend
 Use the frontend to import the PDF with Vocal song / clean digital score; verify
 profile/provider/review status, diagnostics, accented Vietnamese lyrics/chord names,
 and both artifact downloads. Confirm short/empty measures are reported. Open the
-OMR download in Audiveris for correction diagnostics. Transpose by 0 and ±2, preview,
-download and compare timing/chords/ties against the recognized document and source.
+OMR download in Audiveris for correction diagnostics. Use Recognition Review to
+correct the draft and compare with the source, validate, explicitly mark VERIFIED,
+then transpose by 0 and ±2. Preview/download and compare timing/chords/ties against
+the corrected document and source. Follow [the Phase 4D benchmark](REVIEW.md#exact-real-world-validation-cùng-đem-tin-mừng).
 Repeat using scanned PDF/images with Standard quality, and representative SATB,
 piano and orchestral scores. Test a known-correct duration-bearing mixed-size chord
 MusicXML separately in unchanged OSMD. Record failures rather than treating successful

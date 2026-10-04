@@ -1,0 +1,8 @@
+# Python 3.11, separate environment. Install matching torch/torchvision first.
+transformers==4.49.0
+huggingface-hub==0.36.2
+safetensors==0.8.0
+numpy==2.2.6
+Pillow==11.3.0
+loguru==0.7.3
+pypdfium2==4.30.0
