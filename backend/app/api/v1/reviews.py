@@ -10,7 +10,7 @@ from starlette.concurrency import run_in_threadpool
 from app.core.config import settings
 from app.music.review.document import ReviewError
 from app.music.review.models import (
-    EventAdd, EventPatch, HarmonyAdd, HarmonyPatch, LyricAdd, TextPatch, VerifyRequest,
+    EventAdd, EventPatch, HarmonyAdd, HarmonyPatch, IssueResolution, LyricAdd, ReviewTranspose, TextPatch, VerifyRequest,
 )
 from app.music.review.service import ReviewService
 from app.music.review.storage import MemoryReviewStore
@@ -180,3 +180,18 @@ async def original_source(review_id: str, service: ReviewService = Depends(get_r
     # Served as data in a browser viewer, never as executable HTML/SVG.
     return Response(source.contents, media_type=source.media_type,
                     headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+
+
+@router.post("/{review_id}/issues/resolve")
+async def resolve_issue(review_id: str, request: IssueResolution, revision: int = Depends(expected_revision),
+                        service: ReviewService = Depends(get_review_service)):
+    return await response(await call(service.resolve_issue, review_id, revision, request))
+
+
+@router.post("/{review_id}/transpose")
+async def transpose_verified_review(review_id: str, request: ReviewTranspose, revision: int = Depends(expected_revision),
+                                    service: ReviewService = Depends(get_review_service)):
+    contents = await call(service.transpose, review_id, revision, request.semitones)
+    return Response(contents, media_type="application/vnd.recordare.musicxml+xml",
+                    headers={"Cache-Control": "no-store", "ETag": f'"{revision}"',
+                             "Content-Disposition": 'attachment; filename="transposed.musicxml"'})

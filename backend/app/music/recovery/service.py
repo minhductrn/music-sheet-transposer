@@ -55,7 +55,9 @@ def recover(xml: bytes, omr: bytes | None, config: Settings, *, analysis_omr: by
         notes = list(evidence.notes())
         report["evidence"].append({"sha256": evidence.sha256, "version": evidence.version,
                                    "heads": len(notes), "small_heads": sum(n.visual_size == "small" for n in notes),
-                                   "possible_small_heads": sum(n.visual_size == "possibly_small" for n in notes)})
+                                   "possible_small_heads": sum(n.visual_size == "possibly_small" for n in notes),
+                                   "sheets": [{"number": sheet.number, "width": sheet.width, "height": sheet.height}
+                                              for sheet in evidence.sheets]})
         report["diagnostics"].extend(evidence.diagnostics)
     if not evidence_sets:
         report["diagnostics"].append("omr_evidence_unavailable")

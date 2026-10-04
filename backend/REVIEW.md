@@ -1,4 +1,4 @@
-# Phase 4D: Recognition review and correction
+# Phase 4E: Review → Correct → Verify → Transpose → Export
 
 PDF/image → Audiveris → **draft** MusicXML → source comparison and corrections →
 structural validation → explicit human verification → corrected MusicXML →
@@ -141,7 +141,9 @@ All paths below start with `/api/v1/reviews`.
 | PATCH | `/{id}/credits/{credit_id}` | Correct printed credit |
 | POST | `/{id}/validate` | Evaluate corrections; never verify automatically |
 | POST | `/{id}/verify` | Explicit confirmation; block on ERROR |
-| POST | `/{id}/undo` / `/{id}/redo` | Restore bounded correction snapshots |
+| POST | `/{id}/undo` / `/{id}/redo` | Restore bounded correction and handling snapshots |
+| POST | `/{id}/issues/resolve` | Confirm related manual correction or accept notation after source comparison |
+| POST | `/{id}/transpose` | Revision-checked VERIFIED corrected XML → existing transposer → downloadable XML |
 | GET | `/{id}/musicxml` | Corrected XML, or `?original=true` for exact draft bytes |
 | GET | `/{id}/musicxml?verified_only=true` | Only VERIFIED corrected XML (409 otherwise) |
 | GET | `/{id}/source` | Original PDF/image bytes with validated MIME |
@@ -171,29 +173,34 @@ one anchor. Request schemas reject unknown fields and XML-incompatible text.
 
 ## Lifecycle, validation and verification
 
-New recognition reviews start **DRAFT**. Corrections or first validation move them
+New recognition reviews start **DRAFT**, or **REVIEW_REQUIRED** when imported
+semantic evidence includes recovery or review candidates. Corrections or first validation move them
 to **REVIEW_REQUIRED**. Only an explicit verify request with
 `{"confirmed_source_comparison": true}` moves a score to **VERIFIED**.
 
 - **ERROR**: invalid pitch/octave, missing event representation/duration/divisions,
-  invalid staff/voice, broken chords, negative timing, invalid required meter fields
+  invalid staff/voice, broken chords, overlapping intervals in one voice, negative timing, invalid required meter fields
   or an empty score. Verification is blocked until corrected.
 - **WARNING**: measure duration mismatch, suspicious empty measures and timing that
   needs manual review (e.g. differing staff meters). Warnings remain visible and
   may be accepted only after source comparison.
 - **INFO**: reminder that these checks cannot establish recognition accuracy.
 
-Every correction and undo/redo invalidates verification. A structurally clean score
+Every correction, issue-handling action and undo/redo invalidates verification.
+Unresolved semantic candidates also block verification; see the handling policy below. A structurally clean score
 stays a draft until the user confirms comparison. Up to 500 diagnostics are returned;
 all errors, including omitted diagnostics, still block verification. Duration
 mismatch is a warning because pickups, unmeasured notation and export conventions
 need musical judgment. Explicit `implicit="yes"` pickup measures may be shorter.
 
-The frontend disables recognized-score transposition until VERIFIED, then retrieves
-the server's verified corrected bytes immediately before calling the existing
-MusicXML transposition API. Direct MusicXML upload retains its previous workflow.
-The stable transposition API remains unaware of review sessions and models; review
-gating is a product workflow, not an access-control change to that existing API.
+The frontend disables recognized-score transposition until VERIFIED. It sends the
+review ID, integer semitone amount and current `If-Match` revision to the review
+transpose endpoint. Under the existing storage lock, the backend checks that
+revision and VERIFIED state, obtains current corrected XML, and calls the unchanged
+preservation transposer. There is no download/re-upload step or original-XML
+fallback. Direct MusicXML upload retains its existing transposition API; that API
+remains independent of review sessions, so review gating is not a general access
+control policy for uploaded XML.
 
 ## Source retention, limits and undo/redo
 
@@ -247,10 +254,13 @@ editor. No CSS/global note resizing or renderer internals are patched.
 [OSMD VexFlow converter](https://github.com/opensheetmusicdisplay/opensheetmusicdisplay/blob/2.1.2/src/MusicalScore/Graphical/VexFlow/VexFlowConverter.ts).
 
 This focused editor does not edit measure/staff creation, arbitrary onset placement,
-backup/forward amounts, tuplet ratios, beams, ties/slurs or full harmony degrees.
+backup/forward amounts, tuplet ratios, beams, arbitrary ties/slurs or full harmony degrees.
+An inserted or existing note can explicitly connect a tie to an adjacent matching note;
+see the missing-note correction workflow below.
 It preserves them and reports relevant structural errors; complex rhythmic repairs
-can require an external notation editor. It does not reconcile ties after a pitch
-edit or infer new beam groupings. Small/cue rendering and native PDF controls need
+can require an external notation editor. Existing imported ties are not reconciled after a pitch
+edit; manually connected insertion ties are checked and block verification if broken.
+It does not infer new beam groupings. Small/cue rendering and native PDF controls need
 real-browser validation. The existing transposer's limitations still apply:
 nonzero microtonal/nontraditional-key transposition is unsupported, and harmony
 symbols are retained rather than transposed. Verification does not add transposer
@@ -262,7 +272,7 @@ capabilities or promise faithful engraving.
    `env -u PYTHONPATH .venv/bin/python -m uvicorn app.main:app --reload` from `backend`,
    and `npm run dev` from `frontend`. Keep the working OCR environment from OMR.md.
 2. Import the PDF, choose Vocal song / clean digital score, and Recognize Sheet
-   Music. Confirm the automatic review opens as DRAFT with the original source.
+   Music. Confirm the automatic review opens as DRAFT or REVIEW_REQUIRED with the original source.
 3. Navigate/zoom the source and compare each measure with the OSMD preview. Record
    omitted notes, wrong pitches, timing, text and ties; do not accept the OMR export
    as ground truth. No further recognition runs when reviewing.
@@ -282,10 +292,12 @@ capabilities or promise faithful engraving.
 8. Exercise Undo/Redo for a note, addition/deletion, lyric and harmony. Validate
    corrections, inspect every ERROR/WARNING and compare all measure timing with the
    PDF. Complex tie/beam or timing-event repairs may require a notation editor.
-9. After resolving errors and reviewing warnings, check the source-comparison
+9. Handle every candidate issue by confirming a related correction or explicitly
+   accepting it after source comparison, with a note. After resolving errors and
+   reviewing warnings, check the source-comparison
    confirmation and Mark VERIFIED. Confirm transposition enables. Make one edit
    and ensure verification/transposition are invalidated; undo, review and verify
-   again. Download verified.musicxml before closing/restarting.
+   again. Export corrected-verified.musicxml before closing/restarting.
 10. Transpose 0, +2 and -2 separately. Download each XML. At 0 confirm the corrected
     bytes are unchanged; at ±2 confirm expected pitch changes and unchanged chord
     markers, duration/onset relationships, voices/staves, sizes and non-grace
@@ -295,3 +307,222 @@ capabilities or promise faithful engraving.
 Automated checks: run the complete backend suite with its `.venv`, then frontend
 `npm run lint`, `npm run build`, and `git diff --check`. There is no established
 frontend test framework; this milestone adds no separate browser-test stack.
+
+
+## Phase 4E issue handling and provenance
+
+The existing `DRAFT`, `REVIEW_REQUIRED`, and `VERIFIED` states are retained.
+The frontend displays correction/validation progress rather than persisting a
+second state machine. Every accepted mutation projects and validates the patched
+XML before committing and returns updated XML for immediate OSMD reload. Stable
+selection survives ordinary edits; unsupported preview engraving does not undo a
+valid XML patch.
+
+`review_issues` projects import-time semantic candidates with current handling:
+
+- `REVIEW_REQUIRED`: unresolved; verification is blocked.
+- `AUTO_RECOVERED`: the corroborated import patch is present in its history snapshot.
+- `MANUALLY_CORRECTED`: a related event/measure has a recorded manual edit and the
+  reviewer explicitly confirms the issue is handled, with a nonempty note.
+- `ACCEPTED`: the reviewer explicitly accepts the current notation after source
+  comparison, with a nonempty note. This permits accepting a false-positive issue
+  without fabricating a correction.
+
+Use `POST /api/v1/reviews/{id}/issues/resolve` with `If-Match` and JSON such as:
+
+```json
+{
+  "issue_id": "the-id-returned-in-review_issues",
+  "disposition": "MANUALLY_CORRECTED",
+  "note": "Compared the upper chord member with the source and corrected its display size."
+}
+```
+
+`ACCEPTED` is the alternative disposition. Unknown issues return 404, stale
+revisions/already-handled issues return 409, and invalid input returns 422.
+Applying a patch does not silently claim it resolves musical uncertainty. A
+correction in an issue's related measure conservatively reopens handling; its
+previous note remains visible, and earlier snapshots retain the prior disposition.
+Handle issues after finishing corrections in that measure. Global evidence
+warnings without candidate IDs remain visible for whole-score source comparison.
+
+Issue handling, manual-field provenance, stable evidence-to-event bindings and XML
+share the existing bounded undo/redo stack and storage accounting. Undoing import
+recovery reopens its issue; undoing a handling action restores its unresolved state.
+Undo never restores VERIFIED status. New edits after undo still clear redo.
+Event provenance distinguishes baseline/imported XML, semantic additions and manual
+additions, and lists manually changed fields and related evidence IDs. Pitch edits
+retain evidence identity. The original semantic report and original XML remain
+unchanged. Sidecars are session data and are not embedded in exported MusicXML;
+there is no durable audit log across session expiry/reimport.
+
+## Validation, transpose and export behavior
+
+The existing ordered MusicXML importer validates durations, chords, divisions,
+staff/voice and backup/forward context; the existing exact-fraction rhythm checker
+now detects voice overlap even without uploaded `.omr` evidence. Voice underfill
+is a warning. The existing policies are preserved: ordinary review measure-extent
+mismatch is a source-comparison warning, while semantic-evidence reviews also
+retain recovery's blocking overfill check. Invalid/unrepresentable patches roll
+back with an explanation. Structurally representable edits producing musical
+errors remain visible, undoable and unverified; they are not silently discarded.
+A display-size-only patch introduces no timing change or special rhythm rule.
+
+`POST /api/v1/reviews/{id}/transpose`, with `If-Match` and
+`{"semitones": 2}`, returns transposed MusicXML as an attachment without mutating
+the verified review. Missing revision returns 428; stale/unverified reviews return
+409; unsupported transposer values return 422. The stable transposer has no new
+pitch/key/harmony semantics. The response carries the input revision as its ETag.
+
+The workspace offers a draft download for saving work, a server-gated **Export
+verified corrected MusicXML** action, and a separate transposed MusicXML download.
+Changing the review, undoing/redoing, closing/reloading it, changing the import, or
+changing semitones clears derived transposed preview/output. Export alone does not
+invalidate that output. Another client's changes are detected by revision checks
+on the next request; the local screen has no live cross-client synchronization.
+
+Candidate selection coordinates inspector, OSMD rhythmic cursor and source
+location. Valid bounds with page dimensions support a normalized image overlay
+only when source aspect ratio is compatible; these are OMR evidence locations,
+not a pixel-accurate source registration guarantee. Missing/incompatible geometry
+shows an explicit fallback. Native embedded PDFs navigate to the evidence page
+and display coordinates but do not support a box overlay. No new viewer or OSMD
+internal rendering patch is introduced.
+
+## Phase 4E validation checkpoint
+
+The complete backend suite passes **611 tests** (the existing 544 plus 24 focused
+workflow regressions, 18 human tied-insertion regressions and 22 existing-note
+tie correction regressions plus 3 overfill-diagnostic regressions), with the same two dependency deprecation warnings. Frontend
+lint and production build pass; Vite still warns about the large OSMD bundle.
+The regressions cover mixed-size patches, unrelated XML preservation, invalid
+inputs, undo/redo, issue acceptance/correction, provenance after pitch edits,
+verification gates, stale revisions, corrected exports, and corrected-byte input
+capture through 0/+2/-2 transposition.
+
+Saved Cùng Đem Tin Mừng artifacts were unavailable in this checkout. Equivalent
+synthetic A4+C5 and F4+A4 pairs were corrected regular→small, verified, and sent
+through zero-semitone transposition with unchanged pitch/onset/duration/voice/staff,
+chord structure and non-grace timing. No Audiveris recognition or SMT benchmark
+was rerun. Native PDF navigation and mixed-size engraving still need real-browser
+acceptance testing. Seventeen focused frontend component regressions use Node's built-in
+test tools with the installed TypeScript compiler; no browser runner is installed.
+
+## Human missing-note correction with a tie
+
+Insertion already supported pitch step/alter/octave, exact rational duration in
+quarter beats, voice/staff, grace and sequential/chord placement. Phase 4E adds
+optional `tie_to_event_id` to `POST /api/v1/reviews/{id}/events`. No recognition
+or recovery rule is involved. Durations are quarter beats: convert source beats
+using its meter before entering the value.
+
+Select an existing event as the insertion anchor. Set the missing note's pitch,
+duration, voice, staff and display size in the inspector; leave Grace timing off.
+Choose Note and optionally choose **Tie inserted note to**, then **Add before
+selected**, **Add after selected**, or **Add simultaneous note** for a chord.
+Targets are offered in this and the following measure of the same part. The
+server checks matching written pitch, voice/staff, known duration-bearing timing,
+and temporal adjacency (including a barline). Rest/grace/cue targets, skipped
+measures, timing gaps, intervening events and rhythm errors are rejected atomically.
+A continuation's existing tie start and unrelated notations remain intact.
+
+Both semantic `<tie type="start/stop"/>` and notation
+`<notations><tied type="start/stop"/></notations>` are patched. This is a musical
+tie, not visual-only markup. An existing target stop is retained without duplication.
+Undo/redo snapshot the inserted event, both endpoints, provenance and tie ownership.
+Deleting an endpoint cleans the counterpart markup introduced by this operation,
+while preserving preexisting target stops. Subsequent edits that invalidate a manual
+link produce an `invalid_manual_tie` error and prevent verification.
+
+Invalid tied insertions are rejected without changing revision. Ordinary insertions
+can remain as undoable drafts; overlap/overfill errors block verification and
+underfill remains a warning under the existing partial-voice/pickup policy.
+Every insertion invalidates verification and clears transposed output through the
+existing revision update. The preview loads corrected bytes without re-upload.
+Inspect preview/diagnostics, Undo if incorrect, Redo if appropriate, compare with
+the source, then verify, transpose and export using the existing workflow.
+
+### Known source versus preview layout limitation
+
+Real browser acceptance observed substantially different source-PDF and OSMD
+system layouts. Preserved MusicXML layout information does not reconstruct source
+line breaks, spacing or page/system geometry, and OSMD may reflow the score.
+Compare musical events with the source independently of system placement.
+Layout reconstruction is outside this correction task and remains unsolved.
+
+The synthetic regressions cover a missing two-quarter-beat A note tied to its
+following note, namespaces, barline connections, chord onset/alter, existing
+continuations, rejection without mutation, deletion cleanup, undo/redo, verification
+invalidation, unrelated XML preservation, corrected exports and corrected-byte
+0/+2/-2 transposition with ties preserved. Run frontend checks with:
+
+```bash
+cd frontend
+node tests/review-insertion.test.mjs
+node tests/review-selection.test.mjs
+npm run lint
+npm run build
+```
+
+Repeat real-browser acceptance for the new insertion controls and tie engraving;
+component tests do not validate OSMD rendering or native browser downloads.
+
+## Existing-note tie correction
+
+The first note may already be present. Select it, choose **Tie to** in the inspector,
+and use **Apply correction**. The dropdown shows compatible notes by measure,
+voice, pitch, onset, duration and staff; no internal event ID must be entered.
+Its current outgoing target is selected automatically. Choose another compatible
+target to change the relationship or **No tie** to remove it. Target changes are
+limited to valid adjacent notes (for example equivalent chord peers), not notes
+separated by a gap or an intervening event. The insertion selector remains separate.
+
+The existing `PATCH /api/v1/reviews/{id}/events/{event_id}` accepts
+`{"tie_to_event_id":"target-event-id"}` to add/change an outgoing tie, or
+`{"tie_to_event_id":null}` to remove it. Omission retains the current relationship.
+The shared tie helpers used by insertion patch both sound `<tie>` and notation
+`<tied>` endpoints; only the source start and target stop are changed. Incoming
+source stops, outgoing target starts, slurs, ornaments, articulations, lyrics,
+harmony, timing and unrelated XML remain intact. Unambiguously paired imported
+ties are supported; unresolved or duplicated endpoints require an external editor
+rather than unsafe guessing. Missing IDs return a JSON 404 error; invalid
+relationships return a JSON 422 error; stale revisions return a JSON 409 error.
+Failures leave the document and revision unchanged.
+
+Normal validation is rerun after the edit. Unlike insertion, tie-only correction
+does not change rhythm and may repair a tie while unrelated errors remain. Those
+errors/warnings are retained and verification stays blocked by any error. The
+regressions include a draft with one error and seven warnings, whose diagnostics
+remain identical after the tie correction. Musical compatibility still requires
+valid, non-grace pitched endpoints of identical step/alter/octave, voice and staff
+in the same part, at contiguous onsets in this or the immediately following measure.
+Existing incoming relationships cannot be stolen from another source.
+
+Add/change/remove travel through normal revision, provenance and undo/redo
+snapshots. Each edit requires source comparison and verification again and clears
+the stale transposed preview/download. Inspector drafts remount by revision so
+correction and undo/redo display the current tie target. Automated frontend checks
+exercise the actual component callbacks, with API/provider calls stubbed. Also run:
+
+```bash
+cd frontend
+node tests/review-lifecycle.test.mjs
+```
+
+Synthetic A4 duration 2 at onset 0 tied to A4 duration 1/2 at onset 2 remains two
+distinct notes. Corrected bytes feed the unchanged preservation transposer at
+0/+2/-2 semitones with both sound and notation endpoints preserved. No recognition,
+recovery heuristics, SMT, transposition algorithm or layout reconstruction changes
+are part of this correction. Repeat browser acceptance: select the existing
+source, add the tie, inspect both notes and diagnostics, undo/redo, remove/undo
+removal, correct any remaining blocking errors, verify, transpose and export.
+Do not insert the already-present note again. The OSMD/source system-layout
+limitation documented above still applies.
+
+## Final overfill diagnostic investigation
+
+See [the diagnostic investigation](PHASE4E_DIAGNOSTIC_REVIEW.md) for the evidence
+boundary, exact synthetic one-error/seven-warning reproduction, cursor arithmetic,
+sequential insertion/backup limits and checkpoint decision. The real session's
+event ledger and source barlines still require inspection; no production timing
+or validation rule was changed to clear an invalid score.

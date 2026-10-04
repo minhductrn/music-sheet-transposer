@@ -147,7 +147,9 @@ def duration_patch(doc, note, duration: str, divisions, grace=False):
 
 def patch_event(doc: Document, identifier: str, patch: EventPatch):
     values = patch.model_dump(exclude_unset=True)
-    if not values or any(value is None for value in values.values()):
+    tie_edit = "tie_to_event_id" in values
+    values.pop("tie_to_event_id", None)
+    if (not values and not tie_edit) or any(value is None for value in values.values()):
         raise ReviewError("Provide at least one non-null event correction.")
     note = doc.get(identifier, "note")
     measure, event = context(doc, note)
@@ -178,6 +180,9 @@ def patch_event(doc: Document, identifier: str, patch: EventPatch):
             duration_patch(doc, member, patch.duration, measure.divisions, grace)
     if patch.display_size:
         size_patch(doc, note, patch.display_size)
+    if tie_edit:
+        from .ties import set_target
+        set_target(doc, identifier, patch.tie_to_event_id)
     doc.changed = True
 
 
@@ -226,11 +231,16 @@ def add_event(doc: Document, identifier: str, request: EventAdd):
         position = next((i for i, element in enumerate(measure) if local(element.tag) == "barline" and element.get("location", "right") == "right"), len(measure))
     measure.insert(position, note)
     doc.refs[identifier] = note
+    if request.tie_to_event_id:
+        from .ties import connect
+        connect(doc, identifier, request.tie_to_event_id)
     doc.changed = True
 
 
 def delete_event(doc: Document, identifier: str):
     note = doc.get(identifier, "note")
+    from .ties import disconnect_deleted
+    disconnect_deleted(doc, identifier)
     members = group(doc, note)
     if members[0] is note and len(members) > 1:
         promoted = members[1]

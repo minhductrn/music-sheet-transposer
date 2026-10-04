@@ -34,6 +34,20 @@ export interface SemanticRecovery {
   }[]
 }
 
+export interface SourceLocation {
+  page: number
+  bounds: [number, number, number, number] | null
+  width: number | null
+  height: number | null
+}
+
+export type ReviewIssue = SemanticRecovery['candidates'][number] & {
+  status: 'REVIEW_REQUIRED' | 'AUTO_RECOVERED' | 'MANUALLY_CORRECTED' | 'ACCEPTED'
+  handling: { status?: string; note?: string; revision?: number }
+  can_mark_corrected: boolean
+  source_location: SourceLocation
+}
+
 export interface ScoreEvent {
   id: string
   kind: 'note' | 'rest' | 'unpitched'
@@ -48,8 +62,11 @@ export interface ScoreEvent {
   chord_member: boolean
   grace: boolean
   display_size: DisplaySize
+  tie_target_id?: string | null
+  tie_target_ids?: string[]
   ties: string[]
   lyric_ids: string[]
+  provenance: { origin: string; manual_fields: string[]; evidence_ids: string[] }
 }
 
 export interface Measure {
@@ -98,11 +115,13 @@ export interface ReviewPayload {
   }
   validation: {
     can_verify: boolean
+    unresolved_issue_count: number
     error_count: number
     warning_count: number
     truncated: boolean
     diagnostics: { code: string; message: string; severity: 'ERROR' | 'WARNING' | 'INFO'; measure_id: string | null; event_id: string | null }[]
   }
+  review_issues: ReviewIssue[]
   can_undo: boolean
   can_redo: boolean
   source: { media_type: string; pages: number } | null
@@ -115,6 +134,7 @@ export interface ReviewSession extends Omit<ReviewPayload, 'musicxml_base64'> {
 }
 
 export interface EventPatch {
+  tie_to_event_id?: string | null
   pitch?: Pitch
   duration?: string
   voice?: string
@@ -124,6 +144,7 @@ export interface EventPatch {
 }
 
 export interface EventAdd extends EventPatch {
+  tie_to_event_id?: string
   measure_id: string
   kind: 'note' | 'rest'
   after_event_id?: string

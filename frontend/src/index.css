@@ -115,3 +115,6 @@ body {
   .review-comparison { grid-template-columns: 1fr; }
   .source-scroll { height: 480px; }
 }
+
+.source-image { position: relative; }
+.source-highlight { position: absolute; border: 3px solid #c1121f; background: rgba(255, 220, 0, 0.25); pointer-events: none; }

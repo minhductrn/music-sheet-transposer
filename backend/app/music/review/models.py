@@ -99,6 +99,7 @@ class PitchInput(Request):
 
 
 class EventPatch(Request):
+    tie_to_event_id: str | None = Field(default=None, min_length=1, max_length=128)
     pitch: PitchInput | None = None
     duration: str | None = Field(default=None, max_length=32)
     voice: str | None = Field(default=None, min_length=1, max_length=32, pattern=r"^\S+$")
@@ -108,6 +109,7 @@ class EventPatch(Request):
 
 
 class EventAdd(Request):
+    tie_to_event_id: str | None = Field(default=None, max_length=128)
     measure_id: str = Field(max_length=128)
     after_event_id: str | None = Field(default=None, max_length=128)
     before_event_id: str | None = Field(default=None, max_length=128)
@@ -160,3 +162,19 @@ class HarmonyAdd(HarmonyPatch):
     before_event_id: str | None = Field(default=None, max_length=128)
     root_step: Literal["A", "B", "C", "D", "E", "F", "G"] = "C"
     root_alter: str = Field(default="0", max_length=32, pattern=r"^[+-]?\d+(?:\.\d+)?$")
+
+
+class IssueResolution(Request):
+    issue_id: str = Field(min_length=1, max_length=512)
+    disposition: Literal["MANUALLY_CORRECTED", "ACCEPTED"]
+    note: str = Field(min_length=1, max_length=2000)
+
+    @model_validator(mode="after")
+    def meaningful_note(self):
+        if not self.note.strip():
+            raise ValueError("Explain the correction or source comparison")
+        return self
+
+
+class ReviewTranspose(Request):
+    semitones: StrictInt

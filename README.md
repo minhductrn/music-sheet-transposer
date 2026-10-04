@@ -94,7 +94,7 @@ Zero-semitone transposition returns the original bytes after document checks. No
 
 `RecognitionReview`, `EventInspector`, and `SourceViewer` provide measure/voice/event navigation, source comparison, candidate inspection, and explicit corrections. Supported edits include pitch, duration, voice, staff, display size, grace status, note/rest insertion or deletion, and simultaneous chord-note addition. Small display size and grace timing are separate controls.
 
-Reviews begin as drafts. Validation errors block verification; warnings still require musical judgment. The user must confirm source comparison before marking a score `VERIFIED`. The frontend then uses verified corrected XML for transposition. Edits and undo/redo invalidate verification; candidate evidence records import-time findings and is not silently reevaluated after manual edits.
+Reviews begin as drafts or review-required documents. Validation errors and unresolved candidate issues block verification; warnings still require musical judgment. Reviewers can confirm related manual corrections or explicitly accept notation after source comparison, with a handling note. Evidence provenance and handling travel through undo/redo. The user must confirm source comparison before marking a score `VERIFIED`. A revision-checked review endpoint then passes verified corrected XML directly to the existing transposer. The workspace provides verified corrected and transposed MusicXML exports; edits clear stale transposed output. Edits and undo/redo invalidate verification; candidate evidence records import-time findings and is not silently reevaluated after manual edits.
 
 Review sessions and bounded history are stored in process-local memory. Run one backend worker; a restart discards sessions and a browser reload loses local workspace state. Download corrected XML before leaving. See [review API, lifecycle, and correction limits](backend/REVIEW.md).
 
@@ -252,7 +252,7 @@ npm run lint
 npm run build
 ```
 
-The **Phase 4D.2 validation checkpoint** recorded **544 backend tests passed with 2 existing dependency warnings**, frontend lint passed, and production build passed. This is the milestone checkpoint, not a permanent guarantee or a fresh test run for this README update. Tests cover preservation, recognition boundaries, evidence parsing/recovery, conservative confidence handling, review corrections, verification, and undo; inference is mocked and requires no Audiveris or SMT execution.
+The **Phase 4D.2 validation checkpoint** recorded **544 backend tests passed with 2 existing dependency warnings**, frontend lint passed, and production build passed. This is a historical milestone checkpoint, not a permanent guarantee. Phase 4E validation passes **611 backend tests with the same 2 warnings**, frontend lint, and production build; see [review validation](backend/REVIEW.md#phase-4e-validation-checkpoint). Tests cover preservation, recognition boundaries, evidence parsing/recovery, conservative confidence handling, review corrections, verification, and undo; inference is mocked and requires no Audiveris or SMT execution.
 
 ## Milestones and next direction
 
@@ -262,13 +262,16 @@ The **Phase 4D.2 validation checkpoint** recorded **544 backend tests passed wit
 | Phase 4C | Complete | Audiveris OMR, Vietnamese OCR, diagnostics/review foundation |
 | Phase 4D.1 | Complete | SMT proof of concept; retained as experimental and disabled by default |
 | Phase 4D.2 | Complete | Audiveris semantic recovery |
+| Phase 4E | Complete (engine checkpoint) | Issue handling/provenance, verification gate, direct verified transposition and export |
 
-Next direction: improve the product-level **Review → Correct → Verify → Transpose → Export** experience. These steps have an existing implementation; further Phase 4E refinements are future work.
+The product-level **Review → Correct → Verify → Transpose → Export** workflow is implemented. Next refinements include browser acceptance testing, engraving fidelity, and persistent review storage.
 
 ## Limitations
 
 - OMR is not guaranteed to be perfect; source quality and notation complexity affect results. Unusual or ambiguous notation may require human review.
 - Mixed-size notation depends on available OMR evidence. The benchmark's “ta” and “cùng” visual-size cases remain review-required.
+- OSMD system/page layout can differ substantially from the source PDF; source layout reconstruction is a known limitation outside manual musical correction.
+- Human review supports inserting duration-bearing notes with an explicit adjacent tie target and adding/changing/removing ties on existing notes; see [missing-note correction](backend/REVIEW.md#human-missing-note-correction-with-a-tie).
 - OSMD currently has a mixed-size chord rendering limitation; preserved XML semantics do not guarantee an identical visual preview.
 - Semantic recovery supports corroborated simultaneous-note additions and small-display preservation, not arbitrary missing-note or rhythm repair. Unsupported evidence and ambiguous mappings remain for review.
 - Structural validation cannot prove transcription accuracy or complete MusicXML schema compliance. Complex or unsupported musical values can be rejected.

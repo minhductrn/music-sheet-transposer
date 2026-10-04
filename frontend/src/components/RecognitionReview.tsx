@@ -1,8 +1,8 @@
-import { useState } from 'react'
-import { changeReview, closeReview, getReview } from '../services/api'
-import type { Harmony, Measure, ReviewSession, ScoreSelection } from '../types/review'
+import { useRef, useState } from 'react'
+import { changeReview, closeReview, getReview, getVerifiedMusicXml } from '../services/api'
+import type { Harmony, Measure, ReviewIssue, ReviewSession, ScoreSelection } from '../types/review'
 import EventInspector from './EventInspector'
-import { eventLabel } from '../utils/review'
+import { eventLabel, validDuration } from '../utils/review'
 import MusicSheetViewer from './MusicSheetViewer'
 import SourceViewer from './SourceViewer'
 
@@ -53,6 +53,21 @@ function HarmonyEditor({ harmony, measure, busy, change }: { harmony?: Harmony; 
   </fieldset>
 }
 
+function IssueHandling({ issue, busy, change }: { issue: ReviewIssue; busy: boolean; change: Change }) {
+  const [note, setNote] = useState('')
+  return <div>
+    {issue.handling.note && <p>Handling: {issue.handling.note}</p>}
+    {issue.status === 'REVIEW_REQUIRED' && <>
+      <label>Correction / source comparison note <input disabled={busy} value={note} maxLength={2000}
+        onChange={(event) => setNote(event.target.value)} /></label>
+      <button type="button" disabled={busy || !note.trim() || !issue.can_mark_corrected}
+        onClick={() => void change('issues/resolve', 'POST', { issue_id: issue.id, disposition: 'MANUALLY_CORRECTED', note })}>Confirm related correction</button>
+      <button type="button" disabled={busy || !note.trim()}
+        onClick={() => void change('issues/resolve', 'POST', { issue_id: issue.id, disposition: 'ACCEPTED', note })}>Accept after source comparison</button>
+    </>}
+  </div>
+}
+
 function EmptyMeasureAdder({ measure, busy, change }: { measure: Measure; busy: boolean; change: Change }) {
   const [step, setStep] = useState('C')
   const [octave, setOctave] = useState(4)
@@ -64,7 +79,7 @@ function EmptyMeasureAdder({ measure, busy, change }: { measure: Measure; busy: 
     <label>Step <select value={step} onChange={(e) => setStep(e.target.value)}>{'CDEFGAB'.split('').map((value) => <option key={value}>{value}</option>)}</select></label>
     <label>Octave <input type="number" min={0} max={9} value={octave} onChange={(e) => setOctave(Number(e.target.value))} /></label>
     <label>Quarter beats <input value={duration} onChange={(e) => setDuration(e.target.value)} /></label>
-    <button type="button" onClick={() => void change('events', 'POST', { measure_id: measure.id, kind, duration,
+    <button type="button" disabled={!validDuration(duration) || !Number.isInteger(octave) || octave < 0 || octave > 9} onClick={() => void change('events', 'POST', { measure_id: measure.id, kind, duration,
       pitch: kind === 'note' ? { step, alter: '0', octave } : undefined })}>Add event</button>
   </fieldset>
 }
@@ -81,6 +96,8 @@ export default function RecognitionReview({ review, onChange, onBusy, download }
   const [voiceId, setVoiceId] = useState('')
   const [eventId, setEventId] = useState('')
   const [busy, setBusy] = useState(false)
+  const pending = useRef(false)
+  const [candidateId, setCandidateId] = useState('')
   const [error, setError] = useState('')
   const [confirmedRevision, setConfirmedRevision] = useState<number | null>(null)
   const measures = review.score.parts.flatMap((part) => part.measures.map((measure) => ({ part, measure })))
@@ -88,6 +105,12 @@ export default function RecognitionReview({ review, onChange, onBusy, download }
   const measure = current?.measure
   const voice = measure?.voices.find((item) => item.id === voiceId) ?? measure?.voices[0]
   const event = voice?.events.find((item) => item.id === eventId) ?? voice?.events[0]
+  const selectedIssue = review.review_issues.find((issue) => issue.id === candidateId
+    && (issue.event_id ?? issue.anchor_id) === event?.id)
+    ?? review.review_issues.find((issue) => (issue.event_id ?? issue.anchor_id) === event?.id)
+  const tieTargets = current?.part.measures.filter((m) => m.index === measure?.index || m.index === (measure?.index ?? -2) + 1)
+    .flatMap((m) => m.voices.flatMap((v) => v.events.filter((e) => e.kind === 'note' && !e.grace)
+      .map((e) => ({ id: e.id, label: `Measure ${m.number} · voice ${e.voice} · ${eventLabel(e)}` })))) ?? []
   const selectedId = event?.id
   const selectedIndex = measure?.index
   const selectedOnset = event?.onset ?? null
@@ -97,7 +120,8 @@ export default function RecognitionReview({ review, onChange, onBusy, download }
   } : null
 
   async function perform(action: () => Promise<ReviewSession | null>) {
-    if (busy) return
+    if (pending.current) return
+    pending.current = true
     setBusy(true)
     onBusy(true)
     setError('')
@@ -105,17 +129,21 @@ export default function RecognitionReview({ review, onChange, onBusy, download }
       const updated = await action()
       if (updated) {
         const oldIds = new Set(review.score.parts.flatMap((p) => p.measures.flatMap((m) => m.voices.flatMap((v) => v.events.map((e) => e.id)))))
-        const added = updated.score.parts.flatMap((p) => p.measures.flatMap((m) => m.voices.flatMap((v) => v.events))).find((e) => !oldIds.has(e.id))
-        if (added) { setEventId(added.id); setVoiceId(added.voice) }
-        else if (event) {
-          const selected = updated.score.parts.flatMap((p) => p.measures.flatMap((m) => m.voices.flatMap((v) => v.events))).find((e) => e.id === event.id)
-          if (selected) setVoiceId(selected.voice)
+        const entries = updated.score.parts.flatMap((p) => p.measures.flatMap((m) =>
+          m.voices.flatMap((v) => v.events.map((e) => ({ measureId: m.id, event: e })))))
+        const selected = entries.find(({ event: e }) => !oldIds.has(e.id))
+          ?? entries.find(({ event: e }) => e.id === event?.id)
+        if (selected) {
+          setMeasureId(selected.measureId)
+          setVoiceId(selected.event.voice)
+          setEventId(selected.event.id)
         }
       }
-      onChange(updated)
+      if (updated !== review) onChange(updated)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Correction failed. Reload the review and try again.')
     } finally {
+      pending.current = false
       setBusy(false)
       onBusy(false)
     }
@@ -125,6 +153,8 @@ export default function RecognitionReview({ review, onChange, onBusy, download }
 
   return <section className="status-card recognition-review">
     <h2>Recognition Review — <span className={`review-state state-${review.state}`}>{review.state.replaceAll('_', ' ')}</span></h2>
+    <p role="status">{busy ? 'Applying correction / validating…' : review.state === 'VERIFIED'
+      ? 'Approved for transposition and export.' : `${review.validation.unresolved_issue_count} unresolved issues · ${review.validation.error_count} blocking errors. Correct or explicitly handle issues, then verify.`}</p>
     <p>Compare with the original. Structural validation cannot establish recognition accuracy. Corrections do not run Audiveris again.</p>
     <p className="review-hint">This local session expires at {new Date(review.expires_at * 1000).toLocaleTimeString()}. Download corrected XML before closing or restarting the backend.</p>
     <div className="review-toolbar">
@@ -132,30 +162,35 @@ export default function RecognitionReview({ review, onChange, onBusy, download }
       <button disabled={busy || !review.can_redo} onClick={() => void change('redo', 'POST')}>Redo</button>
       <button disabled={busy} onClick={() => void perform(() => getReview(review.id))}>Reload review</button>
       <button disabled={busy} onClick={() => download(review.musicXml, review.state === 'VERIFIED' ? 'verified.musicxml' : 'review-draft.musicxml')}>Download corrected XML</button>
+      <button disabled={busy || review.state !== 'VERIFIED'} onClick={() => void perform(async () => {
+        download(await getVerifiedMusicXml(review.id), 'corrected-verified.musicxml')
+        return review
+      })}>Export verified corrected MusicXML</button>
       <button disabled={busy} onClick={() => void perform(async () => { await closeReview(review.id); return null })}>Close review</button>
     </div>
     {error && <p role="alert" className="status-error">{error}</p>}
-    {review.semantic_recovery && <details>
-      <summary>Recognition evidence: {review.semantic_recovery.auto_recovered} recovered · {review.semantic_recovery.review_candidates} need review</summary>
-      <p>These suggestions were recorded when the review opened. Compare their locations with the source before changing notes. Evidence does not establish musical correctness.</p>
-      <ul>{review.semantic_recovery.candidates.map((candidate) => <li key={candidate.id}>
-        <strong>{candidate.state.replaceAll('_', ' ')}</strong> · {candidate.classification.replaceAll('_', ' ')} · {candidate.confidence}
-        {candidate.pitch && ` · ${candidate.pitch.step}${candidate.pitch.alter === '-1' ? '♭' : candidate.pitch.alter === '1' ? '♯' : ''}${candidate.pitch.octave}`}
+    <details open>
+      <summary>Review issues ({review.validation.unresolved_issue_count} unresolved)</summary>
+      <p>Evidence retains its original confidence and reasons. Apply corrections, then confirm handling with a note, or explicitly accept notation after source comparison. Handling does not prove OMR accuracy.</p>
+      {!review.review_issues.length && <p>No candidate issues recorded. Compare the whole score with the source before verification.</p>}
+      <ul>{review.review_issues.map((candidate) => <li key={candidate.id}>
+        <strong>{candidate.status.replaceAll('_', ' ')}</strong> · {candidate.classification.replaceAll('_', ' ')} · {candidate.confidence}
+        {candidate.pitch && ` · ${candidate.pitch.step} (alter ${candidate.pitch.alter}) ${candidate.pitch.octave}`}
         {` · page ${candidate.evidence.sheet}, staff ${candidate.evidence.staff_number ?? '?'}, head ${candidate.evidence.id}`}
-        {candidate.evidence.bounds && ` · source box ${candidate.evidence.bounds.join(', ')}`}
         <p>{candidate.diagnostics.map((reason) => reason.replaceAll('_', ' ')).join('; ')}.</p>
         <button disabled={busy || !measures.some(({ measure: m }) => m.voices.some((v) => v.events.some((e) => e.id === (candidate.event_id ?? candidate.anchor_id))))}
           onClick={() => {
             const id = candidate.event_id ?? candidate.anchor_id
             const target = measures.find(({ measure: m }) => m.voices.some((v) => v.events.some((e) => e.id === id)))
             const targetVoice = target?.measure.voices.find((v) => v.events.some((e) => e.id === id))
-            if (target && targetVoice && id) { setMeasureId(target.measure.id); setVoiceId(targetVoice.id); setEventId(id) }
-          }}>Select related event</button>
+            if (target && targetVoice && id) { setCandidateId(candidate.id); setMeasureId(target.measure.id); setVoiceId(targetVoice.id); setEventId(id) }
+          }}>Inspect related event and source</button>
+        <IssueHandling key={`${review.revision}-${candidate.id}`} issue={candidate} busy={busy} change={change} />
       </li>)}</ul>
-      {review.semantic_recovery.diagnostics.length > 0 && <p>{review.semantic_recovery.diagnostics.map((reason) => reason.replaceAll('_', ' ')).join('; ')}.</p>}
-    </details>}
+      {review.semantic_recovery?.diagnostics.length ? <p>{review.semantic_recovery.diagnostics.map((reason) => reason.replaceAll('_', ' ')).join('; ')}.</p> : null}
+    </details>
     <div className="review-comparison">
-      <SourceViewer review={review} />
+      <SourceViewer review={review} location={selectedIssue?.source_location ?? null} />
       <div className="review-score"><MusicSheetViewer musicXml={review.musicXml} title="Corrected score" selection={selection} /></div>
     </div>
     <p className="review-hint">Select events below. The cursor marks measure/beat, with pitch, voice and staff identified in the inspector. OSMD’s mixed-size chord preview may differ from the original; per-note sizes and timing remain in the XML.</p>
@@ -171,7 +206,8 @@ export default function RecognitionReview({ review, onChange, onBusy, download }
       </select></label>
     </div>
     {measure && <p>Timing: {measure.actual_duration ?? '?'} / {measure.expected_duration ?? '?'} quarter beats. Divisions: {measure.divisions ?? '?'}. Staff count: {measure.staves}.</p>}
-    {event && measure ? <EventInspector key={`${review.revision}-${event.id}`} event={event} measure={measure} busy={busy} change={change} />
+    {selectedIssue && <p className="review-selection">Selected issue: {selectedIssue.status.replaceAll('_', ' ')} · {selectedIssue.confidence} · {selectedIssue.diagnostics.join('; ')}</p>}
+    {event && measure ? <EventInspector key={`${review.revision}-${event.id}`} event={event} measure={measure} tieTargets={tieTargets} busy={busy} change={change} />
       : measure && <EmptyMeasureAdder key={`${review.revision}-${measure.id}`} measure={measure} busy={busy} change={change} />}
     <details>
       <summary>Title, lyrics and chord symbols</summary>
@@ -195,6 +231,11 @@ export default function RecognitionReview({ review, onChange, onBusy, download }
     <p>{review.validation.error_count} errors · {review.validation.warning_count} warnings</p>
     <ul className="review-diagnostics">{review.validation.diagnostics.map((issue, index) => <li key={`${issue.code}-${index}`} className={issue.severity === 'ERROR' ? 'status-error' : ''}>
       <strong>{issue.severity}</strong>{issue.measure_id && ` · ${measures.find((m) => m.measure.id === issue.measure_id)?.measure.number ?? issue.measure_id}`}: {issue.message}
+      {issue.event_id && <button disabled={busy} onClick={() => {
+        const target = measures.find(({ measure: m }) => m.voices.some((v) => v.events.some((e) => e.id === issue.event_id)))
+        const targetVoice = target?.measure.voices.find((v) => v.events.some((e) => e.id === issue.event_id))
+        if (target && targetVoice) { setMeasureId(target.measure.id); setVoiceId(targetVoice.id); setEventId(issue.event_id!); setCandidateId('') }
+      }}>Inspect event</button>}
     </li>)}</ul>
     {review.validation.truncated && <p>Additional diagnostics were omitted; all errors still block verification.</p>}
     <button disabled={busy} onClick={() => void change('validate', 'POST')}>Validate corrections</button>
@@ -202,7 +243,7 @@ export default function RecognitionReview({ review, onChange, onBusy, download }
       onChange={(e) => setConfirmedRevision(e.target.checked ? review.revision : null)} /> I compared this corrected score with the original, including pitches, sizes, rhythms, lyrics and chord symbols.</label>
     <button disabled={busy || !review.validation.can_verify || confirmedRevision !== review.revision || review.state === 'VERIFIED'}
       onClick={() => void change('verify', 'POST', { confirmed_source_comparison: true })}>Mark VERIFIED</button>
-    {review.state === 'VERIFIED' && <p className="status-success">Verified corrected MusicXML is ready for transposition. Any further correction requires verification again.</p>}
+    {review.state === 'VERIFIED' && <p className="status-success">Verified corrected MusicXML is ready for transposition. Any further correction requires verification again. <a href="#transposition-controls">Continue to transposition</a></p>}
   </section>
 }
 

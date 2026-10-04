@@ -128,11 +128,13 @@ export async function transposeMusicXml(
     },
   )
 
-  if (!response.ok) {
-    throw new Error(
-      `MusicXML transposition failed with status ${response.status}`,
-    )
-  }
+  return (await checkResponse(response)).blob()
+}
 
-  return response.blob()
+
+export async function transposeVerifiedReview(review: ReviewSession, semitones: number): Promise<Blob> {
+  return (await checkResponse(await fetch(`${API_BASE_PATH}/reviews/${encodeURIComponent(review.id)}/transpose`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'If-Match': `"${review.revision}"` },
+    body: JSON.stringify({ semitones }),
+  }))).blob()
 }

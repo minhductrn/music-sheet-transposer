@@ -1,7 +1,8 @@
 """Preserved XML tree and sidecar identities. Never write review IDs into MusicXML."""
 
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+import json
 from xml.etree import ElementTree as ET
 from xml.parsers import expat
 
@@ -22,6 +23,11 @@ class Document:
     refs: dict[str, ET.Element]
     original: bytes
     changed: bool = False
+    # Snapshot sidecars travel with XML/identities through the existing undo stack.
+    issue_handlings: dict[str, dict] = field(default_factory=dict)
+    manual_changes: dict[str, list[str]] = field(default_factory=dict)
+    manual_ties: dict[str, dict] = field(default_factory=dict)
+    candidate_events: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def parse(cls, contents: bytes, max_nodes: int = 100_000):
@@ -97,4 +103,4 @@ class Document:
 
     def weight(self) -> int:
         # Conservative accounting includes the original bytes and tree/sidecar overhead.
-        return len(self.original) + len(self.xml()) + sum(512 for _ in self.root.iter())
+        return len(self.original) + len(self.xml()) + sum(512 for _ in self.root.iter()) + len(json.dumps([self.issue_handlings, self.manual_changes, self.candidate_events, self.manual_ties]).encode()) * 2
