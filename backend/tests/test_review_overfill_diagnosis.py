@@ -46,9 +46,9 @@ def test_two_beat_insertion_can_reproduce_exact_browser_overfill_and_warnings(wo
     assert measure(corrected)['expected_duration'] == '2'
     assert source['provenance']['origin'] == 'manual_addition'
     assert target['provenance']['origin'] == remaining['provenance']['origin'] == 'musicxml_import'
-    assert corrected['validation']['error_count'] == 1 and corrected['validation']['warning_count'] == 7
-    assert any(d['code'] == 'measure_overfilled' and d['severity'] == 'ERROR' for d in corrected['validation']['diagnostics'])
-    assert request(client, corrected, 'verify', {'confirmed_source_comparison': True}).status_code == 409
+    assert corrected['validation']['error_count'] == 0 and corrected['validation']['warning_count'] == 8
+    assert any(d['code'] == 'measure_overfilled' and d['severity'] == 'WARNING' and not d['blocking'] for d in corrected['validation']['diagnostics'])
+    assert corrected['validation']['can_verify']
     # Existing-note tie edit retains both notes and their independent durations.
     response = request(client, corrected, f'events/{source["id"]}', {'tie_to_event_id': target['id']}, 'PATCH')
     assert response.status_code == 200, response.text
@@ -56,7 +56,7 @@ def test_two_beat_insertion_can_reproduce_exact_browser_overfill_and_warnings(wo
     assert [(e['onset'], e['duration']) for e in events(tied)] == [('0', '2'), ('2', '1/2'), ('5/2', '1')]
     assert events(tied)[0]['ties'] == ['start'] and events(tied)[1]['ties'] == ['stop']
     assert tied['validation'] == corrected['validation']
-    assert request(client, tied, 'verify', {'confirmed_source_comparison': True}).status_code == 409
+    assert tied['validation']['can_verify']
     for number in ('1', '4', '17'):
         assert measure_nodes(tied)[number] == measure_nodes(original)[number]
     undone_tie = request(client, tied, 'undo').json()
@@ -73,7 +73,7 @@ def test_chord_insertion_does_not_double_count_duration(workflow):
     client, _ = workflow
     original = create(client, XML)
     anchor = events(original)[0]
-    corrected = add(client, original, before_event_id=None, chord_with_id=anchor['id'],
+    corrected = add(client, original, before_event_id=None, chord_with_id=anchor['id'], duration=anchor['duration'],
                     pitch=dict(step='C', alter='0', octave=4))
     assert measure(corrected)['actual_duration'] == '3/2'
     assert [(e['onset'], e['duration']) for e in events(corrected)] == [('0', '1/2'), ('0', '1/2'), ('1/2', '1')]
@@ -106,5 +106,5 @@ def test_sequential_insertion_preserves_backup_forward_and_next_measure(workflow
         assert ET.tostring(after.find(tag)) == ET.tostring(before.find(tag))
     for number in ('4', '5', '17'):
         assert measure_nodes(corrected)[number] == measure_nodes(original)[number]
-    assert any(d['code'] == 'measure_overfilled' and d['severity'] == 'ERROR' for d in corrected['validation']['diagnostics'])
-    assert request(client, corrected, 'verify', {'confirmed_source_comparison': True}).status_code == 409
+    assert any(d['code'] == 'measure_overfilled' and d['severity'] == 'WARNING' and not d['blocking'] for d in corrected['validation']['diagnostics'])
+    assert corrected['validation']['can_verify']

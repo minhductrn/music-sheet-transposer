@@ -96,7 +96,7 @@ test('missing note controls send duration-bearing insertion with explicit tie ta
   assert.equal(body.voice, '2'); assert.equal(body.staff, 2); assert.equal(body.grace, false)
 })
 
-for (const invalid of ['grace', 'rest']) {
+for (const invalid of ['rest']) {
   test(`tied insertion is disabled for ${invalid}`, () => {
     const harness = inspector()
     let tree = harness.render()
@@ -176,4 +176,17 @@ test('changing existing tie target sends only the new relationship', async () =>
   element(tree, (e) => e.type === 'button' && e.props.children === 'Apply correction').props.onClick()
   await new Promise(setImmediate)
   assert.deepEqual(JSON.parse(JSON.stringify(harness.requests[0].body)), { tie_to_event_id: 'alternative' })
+})
+
+
+test('a user-selected tie target does not prevent grace-note insertion', async () => {
+  const harness = inspector()
+  input(harness.render(), 'Tie inserted note to').props.onChange({ target: { value: 'following' } })
+  input(harness.render(), ' Grace timing').props.onChange({ target: { checked: true } })
+  const tree = harness.render()
+  const add = element(tree, (e) => e.type === 'button' && e.props.children === 'Add before selected')
+  assert.equal(add.props.disabled, false)
+  await add.props.onClick()
+  assert.equal(harness.requests[0].body.grace, true)
+  assert.equal(harness.requests[0].body.tie_to_event_id, 'following')
 })

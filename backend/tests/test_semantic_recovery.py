@@ -373,7 +373,7 @@ def test_review_ambiguity_invalid_evidence_and_quota_are_visible():
         ReviewService(store, config, lambda: 1000).create(XML, omr=weak)
 
 
-def test_semantic_review_validation_blocks_overlapping_voice_verification():
+def test_recognition_ambiguity_and_overlap_do_not_block_explicit_confirmation():
     def change(root):
         measure = root.find("part/measure")
         backup = ET.Element("backup")
@@ -382,11 +382,10 @@ def test_semantic_review_validation_blocks_overlapping_voice_verification():
     config = Settings()
     service = ReviewService(MemoryReviewStore(config, lambda: 1000), config, lambda: 1000)
     payload = service.create(modified_xml(change), omr=archive())
-    assert not payload["validation"]["can_verify"]
+    assert payload["validation"]["can_verify"]
     assert "voice_overlap" in {d["code"] for d in payload["validation"]["diagnostics"]}
-    from app.music.review.document import ReviewError
-    with pytest.raises(ReviewError, match="validation errors"):
-        service.verify(payload["id"], payload["revision"])
+    assert all(not d["blocking"] for d in payload["validation"]["diagnostics"] if d["code"] == "voice_overlap")
+    assert service.verify(payload["id"], payload["revision"])["state"] == "VERIFIED"
 
 
 def test_duplicate_evidence_does_not_repeat_candidates():

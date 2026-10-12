@@ -1,5 +1,6 @@
 """Read ordered XML events into a lossless review projection and diagnostics."""
 
+from copy import deepcopy
 from fractions import Fraction
 import re
 
@@ -175,6 +176,8 @@ def import_score(doc: Document) -> tuple[EditableScore, list[Diagnostic]]:
                                   list(dict.fromkeys(t.get("type", "") for t in (
                                       doc.children(element, "tie") + element.findall(f"{doc.namespace}notations/{doc.namespace}tied")
                                   ))), [])
+                    event.cue = doc.child(element, "cue") is not None
+                    event.key_signature = deepcopy(keys)
                     if chord:
                         if previous is None or previous.voice != voice or previous.grace != grace or previous.kind != "note" or kind != "note":
                             issue("broken_chord", "Chord members require a preceding pitched note in the same voice and grace group.", measure_id=mid, event_id=eid)
@@ -221,4 +224,5 @@ def import_score(doc: Document) -> tuple[EditableScore, list[Diagnostic]]:
                 "credits": [{"id": ids[c], "text": c.text or ""} for c in doc.root.iter() if local(c.tag) == "credit-words"],
                 "musicxml_version": doc.root.get("version", "")}
     issues.append(Diagnostic("source_comparison", "Structural checks do not establish recognition accuracy. Compare every correction with the source.", "INFO"))
-    return EditableScore(metadata, parts, lyrics, harmonies), issues
+    from .structure import project_structure
+    return project_structure(doc, EditableScore(metadata, parts, lyrics, harmonies)), issues

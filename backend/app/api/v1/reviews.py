@@ -10,7 +10,7 @@ from starlette.concurrency import run_in_threadpool
 from app.core.config import settings
 from app.music.review.document import ReviewError
 from app.music.review.models import (
-    EventAdd, EventPatch, HarmonyAdd, HarmonyPatch, IssueResolution, LyricAdd, ReviewTranspose, TextPatch, VerifyRequest,
+    EventAdd, EventMove, EventPatch, HarmonyAdd, HarmonyPatch, LyricAdd, ReviewTranspose, SourceConfirmation, TextPatch, VerifyRequest,
 )
 from app.music.review.service import ReviewService
 from app.music.review.storage import MemoryReviewStore
@@ -112,6 +112,12 @@ async def update_lyric(review_id: str, lyric_id: str, patch: TextPatch,
     return await response(await call(service.lyric_patch, review_id, revision, lyric_id, patch))
 
 
+@router.delete("/{review_id}/lyrics/{lyric_id}")
+async def remove_lyric(review_id: str, lyric_id: str, revision: int = Depends(expected_revision),
+                       service: ReviewService = Depends(get_review_service)):
+    return await response(await call(service.lyric_delete, review_id, revision, lyric_id))
+
+
 @router.post("/{review_id}/events/{event_id}/lyrics")
 async def insert_lyric(review_id: str, event_id: str, lyric: LyricAdd,
                        revision: int = Depends(expected_revision), service: ReviewService = Depends(get_review_service)):
@@ -148,6 +154,13 @@ async def validate_review(review_id: str, revision: int = Depends(expected_revis
     return await response(await call(service.validate, review_id, revision))
 
 
+@router.post("/{review_id}/music-check")
+async def check_music(review_id: str, revision: int = Depends(expected_revision),
+                      service: ReviewService = Depends(get_review_service)):
+    payload = await call(service.music_check, review_id, revision)
+    return JSONResponse(payload, headers={"Cache-Control": "no-store", "ETag": f'"{payload["revision"]}"'})
+
+
 @router.post("/{review_id}/verify")
 async def verify_review(review_id: str, confirmation: VerifyRequest, revision: int = Depends(expected_revision),
                         service: ReviewService = Depends(get_review_service)):
@@ -182,12 +195,6 @@ async def original_source(review_id: str, service: ReviewService = Depends(get_r
                     headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
 
 
-@router.post("/{review_id}/issues/resolve")
-async def resolve_issue(review_id: str, request: IssueResolution, revision: int = Depends(expected_revision),
-                        service: ReviewService = Depends(get_review_service)):
-    return await response(await call(service.resolve_issue, review_id, revision, request))
-
-
 @router.post("/{review_id}/transpose")
 async def transpose_verified_review(review_id: str, request: ReviewTranspose, revision: int = Depends(expected_revision),
                                     service: ReviewService = Depends(get_review_service)):
@@ -195,3 +202,15 @@ async def transpose_verified_review(review_id: str, request: ReviewTranspose, re
     return Response(contents, media_type="application/vnd.recordare.musicxml+xml",
                     headers={"Cache-Control": "no-store", "ETag": f'"{revision}"',
                              "Content-Disposition": 'attachment; filename="transposed.musicxml"'})
+
+
+@router.post("/{review_id}/diagnostics/confirm-source")
+async def confirm_source_diagnostic(review_id: str, request: SourceConfirmation, revision: int = Depends(expected_revision),
+                                    service: ReviewService = Depends(get_review_service)):
+    return await response(await call(service.confirm_source, review_id, revision, request))
+
+
+@router.post("/{review_id}/events/{event_id}/ownership")
+async def move_note(review_id: str, event_id: str, request: EventMove, revision: int = Depends(expected_revision),
+                    service: ReviewService = Depends(get_review_service)):
+    return await response(await call(service.event_move, review_id, revision, event_id, request))

@@ -1,4 +1,6 @@
-# Phase 4E: Review → Correct → Verify → Transpose → Export
+# Review → Correct → Verify → Transpose → Export
+
+Phase 4E remains the correction engine. [Phase 4F Visual Review](PHASE4F_VISUAL_REVIEW.md) adds the default visual interface and retains Advanced Review. “See the mistake → click it → correct it.” Both levels edit the same backend document; browser acceptance is pending.
 
 PDF/image → Audiveris → **draft** MusicXML → source comparison and corrections →
 structural validation → explicit human verification → corrected MusicXML →
@@ -81,7 +83,7 @@ repair is performed.
 The title editor updates movement/work titles. Printed credit text has independent
 controls so a reviewer can correct the visible title without changing a composer
 credit by inference. Lyrics support editing individual elided text segments and
-adding an omitted verse on a selected event. Harmony edits affect root, alteration,
+adding an omitted verse on a selected event and removing a selected verse without touching other verses. Text edits retain Unicode, syllabic and elision/melisma metadata. Lyric mutations record owning-event provenance and use the same revision/history lifecycle. Harmony edits affect root, alteration,
 kind and displayed symbol while preserving degrees, bass, frames and other fields;
 new harmonies anchor before an event's whole chord group. Roman-numeral/function
 root conversions are rejected rather than changing harmonic semantics implicitly.
@@ -135,6 +137,7 @@ All paths below start with `/api/v1/reviews`.
 | POST | `/{id}/events` | Add note/rest, sequential or simultaneous |
 | DELETE | `/{id}/events/{event_id}` | Delete event |
 | PATCH | `/{id}/lyrics/{lyric_id}` | Correct text; optional `segment_index` (default 0) |
+| DELETE | `/{id}/lyrics/{lyric_id}` | Remove only the selected verse on its owning event |
 | POST | `/{id}/events/{event_id}/lyrics` | Add lyric `text` and verse `number` |
 | PATCH / POST | `/{id}/harmonies/{harmony_id}` / `/{id}/harmonies` | Correct/add harmony |
 | PATCH | `/{id}/metadata/title` | Correct score title |
@@ -142,7 +145,6 @@ All paths below start with `/api/v1/reviews`.
 | POST | `/{id}/validate` | Evaluate corrections; never verify automatically |
 | POST | `/{id}/verify` | Explicit confirmation; block on ERROR |
 | POST | `/{id}/undo` / `/{id}/redo` | Restore bounded correction and handling snapshots |
-| POST | `/{id}/issues/resolve` | Confirm related manual correction or accept notation after source comparison |
 | POST | `/{id}/transpose` | Revision-checked VERIFIED corrected XML → existing transposer → downloadable XML |
 | GET | `/{id}/musicxml` | Corrected XML, or `?original=true` for exact draft bytes |
 | GET | `/{id}/musicxml?verified_only=true` | Only VERIFIED corrected XML (409 otherwise) |
@@ -186,8 +188,8 @@ to **REVIEW_REQUIRED**. Only an explicit verify request with
   may be accepted only after source comparison.
 - **INFO**: reminder that these checks cannot establish recognition accuracy.
 
-Every correction, issue-handling action and undo/redo invalidates verification.
-Unresolved semantic candidates also block verification; see the handling policy below. A structurally clean score
+Every correction and undo/redo invalidates verification.
+OMR ambiguity and unresolved recognition candidates do not block explicit whole-score confirmation. A structurally clean score
 stays a draft until the user confirms comparison. Up to 500 diagnostics are returned;
 all errors, including omitted diagnostics, still block verification. Duration
 mismatch is a warning because pickups, unmeasured notation and export conventions
@@ -292,9 +294,7 @@ capabilities or promise faithful engraving.
 8. Exercise Undo/Redo for a note, addition/deletion, lyric and harmony. Validate
    corrections, inspect every ERROR/WARNING and compare all measure timing with the
    PDF. Complex tie/beam or timing-event repairs may require a notation editor.
-9. Handle every candidate issue by confirming a related correction or explicitly
-   accepting it after source comparison, with a note. After resolving errors and
-   reviewing warnings, check the source-comparison
+9. After completing direct corrections and resolving technical errors, check the source-comparison
    confirmation and Mark VERIFIED. Confirm transposition enables. Make one edit
    and ensure verification/transposition are invalidated; undo, review and verify
    again. Export corrected-verified.musicxml before closing/restarting.
@@ -309,61 +309,52 @@ Automated checks: run the complete backend suite with its `.venv`, then frontend
 frontend test framework; this milestone adds no separate browser-test stack.
 
 
-## Phase 4E issue handling and provenance
+## P0.8B — Local-file Save, Save As, and Open
 
-The existing `DRAFT`, `REVIEW_REQUIRED`, and `VERIFIED` states are retained.
-The frontend displays correction/validation progress rather than persisting a
-second state machine. Every accepted mutation projects and validates the patched
-XML before committing and returns updated XML for immediate OSMD reload. Stable
-selection survives ordinary edits; unsupported preview engraving does not undo a
-valid XML patch.
+The user-saved MusicXML file is the durable Canonical Concert Score. There is no
+server-side canonical repository. Backend review sessions remain temporary.
+Save is the explicit user confirmation action and reuses technical validation
+before retrieving corrected XML. The main editor no longer requires a separate
+verification checkbox or displays routine backend review-state labels.
 
-`review_issues` projects import-time semantic candidates with current handling:
+Where supported, the browser save picker chooses a file; subsequent Save writes
+that chosen file, and Save As chooses another destination. A revision is marked
+saved only after the write closes successfully. Browsers without this API request
+a download instead. Download completion and destination cannot be observed by the
+application: users must check their local file and explicitly acknowledge saving
+it. The UI does not claim direct overwrite or automatic download completion.
 
-- `REVIEW_REQUIRED`: unresolved; verification is blocked.
-- `AUTO_RECOVERED`: the corroborated import patch is present in its history snapshot.
-- `MANUALLY_CORRECTED`: a related event/measure has a recorded manual edit and the
-  reviewer explicitly confirms the issue is handled, with a nonempty note.
-- `ACCEPTED`: the reviewer explicitly accepts the current notation after source
-  comparison, with a nonempty note. This permits accepting a false-positive issue
-  without fabricating a correction.
+Export saved MusicXML downloads the last saved snapshot, including when newer
+unsaved edits exist; the UI identifies this distinction. Reviewed transposition
+is enabled only for the current saved revision. This is a guard on the existing
+transposition workflow, not a Stage 2 implementation. Open MusicXML uses the normal
+file input and creates an editing session directly from XML without rerunning OMR.
+Opening alone does not automatically verify the score. Save it explicitly before
+reviewed transposition. File handles and saved-version receipts last only for the
+browser session; the local MusicXML file survives backend restart and expiry.
 
-Use `POST /api/v1/reviews/{id}/issues/resolve` with `If-Match` and JSON such as:
+## P0.7 — Direct correction and whole-score confirmation
 
-```json
-{
-  "issue_id": "the-id-returned-in-review_issues",
-  "disposition": "MANUALLY_CORRECTED",
-  "note": "Compared the upper chord member with the source and corrected its display size."
-}
-```
+The Product Owner removed the Review Issues workflow. There is no per-candidate
+acceptance/correction action, issue-resolution endpoint, or unresolved-candidate
+verification gate. Users correct the score directly and explicitly confirm the
+completed score before it becomes VERIFIED and eligible for verified export.
 
-`ACCEPTED` is the alternative disposition. Unknown issues return 404, stale
-revisions/already-handled issues return 409, and invalid input returns 422.
-Applying a patch does not silently claim it resolves musical uncertainty. A
-correction in an issue's related measure conservatively reopens handling; its
-previous note remains visible, and earlier snapshots retain the prior disposition.
-Handle issues after finishing corrections in that measure. Global evidence
-warnings without candidate IDs remain visible for whole-score source comparison.
-
-Issue handling, manual-field provenance, stable evidence-to-event bindings and XML
-share the existing bounded undo/redo stack and storage accounting. Undoing import
-recovery reopens its issue; undoing a handling action restores its unresolved state.
-Undo never restores VERIFIED status. New edits after undo still clear redo.
-Event provenance distinguishes baseline/imported XML, semantic additions and manual
-additions, and lists manually changed fields and related evidence IDs. Pitch edits
-retain evidence identity. The original semantic report and original XML remain
-unchanged. Sidecars are session data and are not embedded in exported MusicXML;
-there is no durable audit log across session expiry/reimport.
+Original semantic recovery reports, OMR evidence, stable evidence-to-event
+bindings, and correction provenance remain available for recognition and debugging.
+Ambiguity alone cannot block confirmation. Technical representation errors still
+block verification; correction/history operations invalidate prior verification.
+Optional music checks and their independent source annotations remain advisory.
 
 ## Validation, transpose and export behavior
 
 The existing ordered MusicXML importer validates durations, chords, divisions,
 staff/voice and backup/forward context; the existing exact-fraction rhythm checker
 now detects voice overlap even without uploaded `.omr` evidence. Voice underfill
-is a warning. The existing policies are preserved: ordinary review measure-extent
-mismatch is a source-comparison warning, while semantic-evidence reviews also
-retain recovery's blocking overfill check. Invalid/unrepresentable patches roll
+is a warning. Phase 4F.1 applies the blocking overfill check to every review import,
+including plain MusicXML with no recovery evidence or manual timing edits.
+Underfill retains its source-comparison warning policy. No timing, meter or
+measure ownership is changed by validation. Invalid/unrepresentable patches roll
 back with an explanation. Structurally representable edits producing musical
 errors remain visible, undoable and unverified; they are not silently discarded.
 A display-size-only patch introduces no timing change or special rhythm rule.
@@ -396,7 +387,7 @@ workflow regressions, 18 human tied-insertion regressions and 22 existing-note
 tie correction regressions plus 3 overfill-diagnostic regressions), with the same two dependency deprecation warnings. Frontend
 lint and production build pass; Vite still warns about the large OSMD bundle.
 The regressions cover mixed-size patches, unrelated XML preservation, invalid
-inputs, undo/redo, issue acceptance/correction, provenance after pitch edits,
+inputs, undo/redo, explicit score confirmation, provenance after pitch edits,
 verification gates, stale revisions, corrected exports, and corrected-byte input
 capture through 0/+2/-2 transposition.
 
@@ -526,3 +517,19 @@ boundary, exact synthetic one-error/seven-warning reproduction, cursor arithmeti
 sequential insertion/backup limits and checkpoint decision. The real session's
 event ledger and source barlines still require inspection; no production timing
 or validation rule was changed to clear an invalid score.
+
+## SOURCE FIDELITY CONTRACT
+
+Source evidence first. Recognition is a draft. No invented notation and **NO
+SILENT RHYTHMIC REPAIR**: theory validates; it does not compose. Conflicts are valid
+review state. User corrections are explicit and provenance-tracked. Only the
+user-verified corrected review document is trusted for reviewed transposition
+and verified export; draft downloads remain unverified.
+
+Phase 4F.1 adds XML-bound structure and independent `.omr` source evidence. Meter,
+recognized extent, explicit partial status, event/measure ownership, clefs,
+staffs, barlines and duration spelling are projected without rebuilding XML.
+Overfill blocks verification for all imports; underfill stays visible without
+invented rests. Source-review grouping uses explicit XML breaks or guarded
+complete `.omr` ordering. Renderer-only break hints never change exported XML.
+See [the architecture foundation and limitations](PHASE4F_NOTATION_EDITOR_ARCHITECTURE.md).

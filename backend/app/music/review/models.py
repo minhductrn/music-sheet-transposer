@@ -39,6 +39,12 @@ class Event:
     display_size: str
     ties: list[str]
     lyric_ids: list[str]
+    key_signature: list[dict] = field(default_factory=list)
+    measure_id: str | None = None
+    clef: dict | None = None
+    accidental: dict = field(default_factory=dict)
+    notated_duration: dict = field(default_factory=dict)
+    cue: bool = False
 
 
 @dataclass
@@ -60,6 +66,13 @@ class Measure:
     actual_duration: str | None
     validation_state: str
     voices: list[Voice]
+    clefs: list[dict] = field(default_factory=list)
+    context_changes: list[dict] = field(default_factory=list)
+    barlines: list[dict] = field(default_factory=list)
+    partial: dict = field(default_factory=dict)
+    meter_context: list[dict] = field(default_factory=list)
+    rhythm_status: str = "STRUCTURALLY_AMBIGUOUS"
+    conflict_state: str = "NONE"
 
 
 @dataclass
@@ -67,6 +80,7 @@ class Part:
     id: str
     name: str
     measures: list[Measure]
+    staffs: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -75,6 +89,10 @@ class EditableScore:
     parts: list[Part]
     lyrics: list[dict]
     harmonies: list[dict]
+    schema_version: str = "4F.1"
+    pages: list[dict] = field(default_factory=list)
+    systems: list[dict] = field(default_factory=list)
+    layout: dict = field(default_factory=dict)
 
 
 class Request(BaseModel):
@@ -99,6 +117,10 @@ class PitchInput(Request):
 
 
 class EventPatch(Request):
+    tie_direction: Literal["up", "down"] | None = None
+    duration_scope: Literal["note", "chord"] = "chord"
+    preserve_onsets: StrictBool = False
+    written_accidental: Literal["flat-flat", "flat", "natural", "sharp", "double-sharp"] | None = None
     tie_to_event_id: str | None = Field(default=None, min_length=1, max_length=128)
     pitch: PitchInput | None = None
     duration: str | None = Field(default=None, max_length=32)
@@ -109,6 +131,9 @@ class EventPatch(Request):
 
 
 class EventAdd(Request):
+    same_onset_id: str | None = Field(default=None, min_length=1, max_length=128)
+    onset: str | None = Field(default=None, max_length=32)
+    written_accidental: Literal["flat-flat", "flat", "natural", "sharp", "double-sharp"] | None = None
     tie_to_event_id: str | None = Field(default=None, max_length=128)
     measure_id: str = Field(max_length=128)
     after_event_id: str | None = Field(default=None, max_length=128)
@@ -164,17 +189,23 @@ class HarmonyAdd(HarmonyPatch):
     root_alter: str = Field(default="0", max_length=32, pattern=r"^[+-]?\d+(?:\.\d+)?$")
 
 
-class IssueResolution(Request):
-    issue_id: str = Field(min_length=1, max_length=512)
-    disposition: Literal["MANUALLY_CORRECTED", "ACCEPTED"]
+class ReviewTranspose(Request):
+    semitones: StrictInt
+
+
+class SourceConfirmation(Request):
+    diagnostic_id: str = Field(min_length=1, max_length=128)
     note: str = Field(min_length=1, max_length=2000)
 
     @model_validator(mode="after")
     def meaningful_note(self):
         if not self.note.strip():
-            raise ValueError("Explain the correction or source comparison")
+            raise ValueError("Explain the comparison with the original source")
         return self
 
 
-class ReviewTranspose(Request):
-    semitones: StrictInt
+class EventMove(Request):
+    measure_id: str = Field(min_length=1, max_length=128)
+    onset: str = Field(min_length=1, max_length=32)
+    voice: str = Field(min_length=1, max_length=32, pattern=r"^\S+$")
+    staff: StrictInt = Field(ge=1, le=128)

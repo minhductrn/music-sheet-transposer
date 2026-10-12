@@ -6,7 +6,7 @@ import test from 'node:test'
 import vm from 'node:vm'
 import ts from 'typescript'
 
-function componentHarness(initialReview) {
+function componentHarness(initialReview, auxiliaryOwner = () => null) {
   const states = []
   let slot = 0
   let review = initialReview
@@ -42,9 +42,15 @@ function componentHarness(initialReview) {
       if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx }
       if (name === '../services/api') return api
       if (name === '../utils/review') return { eventLabel: (e) => e.id, validDuration: () => true }
+      if (name === '../utils/visualReview') return { auxiliaryLyricOwner: auxiliaryOwner }
       return { __esModule: true, default: name }
     },
   })
+  // These regressions exercise an explicitly selected event, not an implicit default.
+  slot = 0
+  const initial = module.exports.default({ review, onChange() {}, onBusy() {}, download() {} })
+  const first = review.score.parts.flatMap((p) => p.measures.flatMap((m) => m.voices.flatMap((v) => v.events)))[0]
+  if (first) element(initial, (e) => e.type === './MusicSheetViewer').props.onSelect(first.id)
   return {
     requests,
     setResponse(value) { response = value },
@@ -138,3 +144,20 @@ for (const direction of ['undo', 'redo']) {
     assert.equal(next.props.event.id, 'e-1')
   })
 }
+
+test('explicit lyric-owner selection cancels pending tie mode without a mutation', () => {
+  const initial = review(1)
+  const owner = { ...initial.score.parts[0].measures[0].voices[0].events[0], kind: 'note', pitch: { step: 'A', octave: 4, alter: '0' } }
+  const small = { ...owner, id: 'small', pitch: { step: 'C', octave: 5, alter: '0' } }
+  initial.score.parts[0].measures[0].voices[0].events = [owner, small]
+  const harness = componentHarness(initial, (_, event) => event?.id === small.id ? owner : null)
+  element(harness.render(), e => e.type === './MusicSheetViewer').props.onSelect(small.id)
+  element(harness.render(), e => e.type === './ScoreCorrectionToolbar').props.tie()
+  const toolbar = element(harness.render(), e => e.type === './ScoreCorrectionToolbar')
+  assert.equal(toolbar.props.tying, true)
+  toolbar.props.selectLyricOwner()
+  const tree = harness.render()
+  assert.equal(element(tree, e => e.type === './MusicSheetViewer').props.selection.eventId, owner.id)
+  assert.equal(element(tree, e => e.type === './ScoreCorrectionToolbar').props.tying, false)
+  assert.deepEqual(harness.requests, [])
+})

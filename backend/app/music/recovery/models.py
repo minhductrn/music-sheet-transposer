@@ -59,6 +59,8 @@ class EvidenceMeasure:
 class EvidenceSystem:
     id: str
     measures: tuple[EvidenceMeasure, ...]
+    page_id: str | None = None
+    structure: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -69,6 +71,7 @@ class EvidenceSheet:
     interline: float | None
     systems: tuple[EvidenceSystem, ...]
     binary_sha256: str | None = None
+    pages: tuple[dict, ...] = ()
 
 
 @dataclass(frozen=True)

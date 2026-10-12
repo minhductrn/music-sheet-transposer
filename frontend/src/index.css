@@ -81,7 +81,7 @@ body {
   margin: 20px 0;
 }
 
-.source-scroll, .review-score {
+.source-scroll {
   overflow: auto;
   max-height: 720px;
   border: 1px solid #999;
@@ -89,8 +89,9 @@ body {
   color: #1a1a1a;
 }
 
-.review-score { padding: 12px; }
-.source-scroll { height: 640px; }
+.review-score { padding: 12px; min-width: 0; max-width: 100%; border: 1px solid #999; background: white; color: #1a1a1a; }
+.source-viewer { min-width: 0; max-width: 100%; }
+.source-scroll { height: clamp(300px, 60vh, 640px); max-width: 100%; }
 .source-scroll iframe { width: 100%; height: 100%; border: 0; }
 .source-scroll img { max-width: none; display: block; }
 .review-fields, .review-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 12px 0; }
@@ -118,3 +119,55 @@ body {
 
 .source-image { position: relative; }
 .source-highlight { position: absolute; border: 3px solid #c1121f; background: rgba(255, 220, 0, 0.25); pointer-events: none; }
+
+.visual-review-body { border: 0; padding: 0; min-width: 0; }
+.visual-note-editor { border: 1px solid #667085; border-radius: .5rem; padding: 1rem; margin-block: 1rem; }
+.visual-tie-mode { border: 2px solid #198754; padding: .75rem; }
+[data-review-event] { cursor: pointer; }
+[data-review-event]:focus { outline: 3px solid #215bd7; }
+.score-note-selected { filter: drop-shadow(0 0 3px #215bd7); }
+.score-note-selected path { fill: #215bd7 !important; stroke: #215bd7 !important; }
+.score-tie-target { filter: drop-shadow(0 0 4px #198754); }
+.score-tie-target path { fill: #198754 !important; stroke: #198754 !important; }
+
+.source-review-page { width: 100%; }
+
+/* Bound the workspace and controls; scroll notation inside each pane. */
+.recognition-review, .review-comparison, .review-comparison > *, .visual-note-editor { min-width: 0; max-width: 100%; }
+.recognition-review { overflow-wrap: anywhere; }
+.review-fields > *, .review-toolbar > * { min-width: 0; max-width: 100%; }
+.recognition-review select { max-width: 100%; }
+.review-validation { position: sticky; top: 0; z-index: 2; padding: 10px; margin-block: 12px; background: #f7f7f8; color: #1a1a1a; border: 1px solid #999; max-height: 35vh; overflow: auto; }
+.review-validation > summary { cursor: pointer; font-weight: 600; }
+.review-score-viewport { min-width: 0; max-width: 100%; }
+.review-score-scroll { width: 100%; min-width: 0; max-width: 100%; height: clamp(300px, 60vh, 640px); overflow: auto; border: 1px solid #bbb; }
+.review-score-stage { position: relative; overflow: hidden; }
+.review-score-surface { position: absolute; top: 0; left: 0; transform-origin: top left; }
+.recognition-review fieldset { min-width: 0; max-width: 100%; }
+
+/* Primary correction controls belong to the working score, before its viewport. */
+.score-correction-tools { position: sticky; top: 0; z-index: 3; background: #fff; color: #1a1a1a; border-bottom: 1px solid #d0d5dd; padding-block: 6px; }
+.score-icon-toolbar { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.score-icon-toolbar [role="group"] { display: flex; gap: 2px; padding-right: 4px; border-right: 1px solid #d0d5dd; }
+.score-icon-toolbar [role="group"]:last-child { border: 0; }
+.score-icon-toolbar button { display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 32px; padding: 4px; margin: 0; border: 1px solid transparent; border-radius: 4px; background: #f2f4f7; color: #344054; }
+.score-icon-toolbar button[aria-pressed="true"] { background: #e5edff; border-color: #215bd7; color: #1849a9; }
+.score-icon-toolbar button:disabled { opacity: .35; cursor: default; }
+.score-icon-toolbar button:focus-visible { outline: 2px solid #215bd7; outline-offset: 2px; }
+.score-property-panel { border: 1px solid #d0d5dd; border-radius: 4px; padding: 8px; margin: 6px 0 0; font-size: .875rem; max-height: 210px; overflow: auto; }
+.score-property-panel legend { font-weight: 600; }
+.score-property-panel p { margin: 3px 0 6px; }
+.score-property-fields { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.score-property-fields label { display: flex; flex-direction: column; gap: 2px; }
+.score-property-panel select, .score-property-panel input { max-width: 100%; padding: 3px 5px; font-size: .875rem; }
+.score-property-panel button, .score-remove-tie { padding: 4px 8px; font-size: .875rem; margin: 4px 4px 0 0; }
+.score-property-panel details { margin-block: 4px; }
+.score-property-panel .review-fields { margin: 4px 0; gap: 6px; }
+.score-context-status { font-size: .875rem; padding: 5px 0; color: #146c43; }
+.score-insertion-caret { stroke: #215bd7; stroke-width: 2.5; fill: none; vector-effect: non-scaling-stroke; }
+
+.musical-symbol-controls { display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; }
+.musical-symbol-controls button { min-width: 2.5rem; min-height: 2.5rem; font-family: 'Noto Music', 'Bravura', 'Segoe UI Symbol', serif; font-size: 1.65rem; line-height: 1.3; }
+.musical-symbol-controls button[aria-pressed="true"] { background: #dbeafe; border-color: #2563eb; color: #1e40af; }
+
+.musical-symbol-controls .accidental-clear { font-family: inherit; font-size: .85rem; }

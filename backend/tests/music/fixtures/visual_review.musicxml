@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic Phase 4F browser fixture; not a transcription of any real song. -->
+<score-partwise version="4.0">
+  <work><work-title>Synthetic visual review</work-title></work>
+  <part-list><score-part id="P1"><part-name>Voice</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>4</divisions><key><fifths>0</fifths></key><time><beats>7</beats><beat-type>8</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes>
+      <direction><direction-type><words>Synthetic: two adjacent notes intentionally omitted</words></direction-type></direction>
+      <harmony><root><root-step>C</root-step></root><kind>major</kind></harmony>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><type>quarter</type><lyric number="1"><syllabic>single</syllabic><text>khế“ịp</text></lyric><lyric number="2"><syllabic>single</syllabic><text>khác</text></lyric></note>
+      <barline location="right"><bar-style>regular</bar-style></barline>
+    </measure>
+    <measure number="2">
+      <attributes><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><type>quarter</type><lyric number="1"><text>đây</text></lyric></note>
+      <note><rest/><duration>12</duration><voice>1</voice><type>half</type><dot/></note>
+      <barline location="right"><bar-style>light-heavy</bar-style></barline>
+    </measure>
+  </part>
+</score-partwise>

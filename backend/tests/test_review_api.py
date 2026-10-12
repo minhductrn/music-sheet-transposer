@@ -156,11 +156,14 @@ def test_validation_never_auto_verifies_and_requires_human_confirmation(setup_re
 
 def test_errors_block_verification_but_warnings_allow_it_and_stay_visible(setup_review):
     client, _, _ = setup_review
-    invalid = XML.replace(b"<octave>5</octave>", b"<octave>22</octave>")
+    # A partial final measure is a warning; correction-induced overfill is an error.
+    invalid = XML.replace(b"<octave>5</octave>", b"<octave>22</octave>").replace(
+        b'<duration>16</duration><tie type="stop"/>', b'<duration>12</duration><tie type="stop"/>',
+    )
     review = create(client, invalid).json()
     assert review["validation"]["error_count"] > 0
     assert change(client, review, "verify", {"confirmed_source_comparison": True}).status_code == 409
-    corrected = change(client, review, "events/e-2", {"pitch": {"step": "C", "octave": 5}, "duration": "2"}, "PATCH").json()
+    corrected = change(client, review, "events/e-2", {"pitch": {"step": "C", "octave": 5}, "duration": "1"}, "PATCH").json()
     assert corrected["validation"]["error_count"] == 0 and corrected["validation"]["warning_count"] > 0
     verified = change(client, corrected, "verify", {"confirmed_source_comparison": True}).json()
     assert verified["state"] == "VERIFIED" and verified["validation"]["warning_count"] > 0

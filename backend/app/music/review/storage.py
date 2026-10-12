@@ -29,9 +29,10 @@ class ReviewSession:
     undo: list[Document] = field(default_factory=list)
     redo: list[Document] = field(default_factory=list)
     semantic_recovery: dict | None = None
+    source_evidence: list[dict] = field(default_factory=list)
 
     def weight(self):
-        return (self.document.weight() + (len(self.source.contents) if self.source else 0)
+        return (len(json.dumps(self.source_evidence).encode()) * 2 + self.document.weight() + (len(self.source.contents) if self.source else 0)
                 + sum(d.weight() for d in self.undo + self.redo)
                 + (len(json.dumps(self.semantic_recovery).encode()) * 2 if self.semantic_recovery is not None else 0))
 

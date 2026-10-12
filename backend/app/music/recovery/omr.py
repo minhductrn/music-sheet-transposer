@@ -229,10 +229,33 @@ def _sheet(root, stub, sheet_number, provenance, issues):
                         ))
                     measures.append(EvidenceMeasure(mid, logical, left, right, tuple(sorted(notes, key=lambda n: (n.center or (0, 0), n.id))),
                                                     part.get("id"), tuple(staff_nodes)))
-            systems.append(EvidenceSystem(sid, tuple(measures)))
+            structural = {
+                "origin": "SOURCE_OBSERVATION", "coordinate_space": "AUDIVERIS_SHEET_PIXELS",
+                "provenance": provenance + "/page:" + str(page.get("id")) + "/system:" + sid,
+                "bounds": bounds(system),
+                "staffs": [{"id": staff.get("id"), "physical_part": part.get("id"),
+                            "left": number(staff.get("left")), "right": number(staff.get("right")),
+                            "lines": [[{"x": number(point.get("x")), "y": number(point.get("y"))}
+                                       for point in line.findall("point")] for line in staff.findall("lines/line")]}
+                           for part in system.findall("part") for staff in part.findall("staff")],
+                "stacks": [{"id": stack.get("id"), "left": number(stack.get("left")), "right": number(stack.get("right")),
+                            "expected": stack.get("expected"), "duration": stack.get("duration"),
+                            "slots": [{"id": slot.get("id"), "x_offset": number(slot.get("x-offset")), "time_offset": slot.get("time-offset")}
+                                      for slot in stack.findall("slot")]} for stack in system.findall("stack")],
+                "inters": [{"id": entry.get("id"), "kind": entry.tag, "attributes": dict(entry.attrib),
+                            "bounds": bounds(entry), "fields": [{"name": c.tag, "text": c.text, "attributes": dict(c.attrib)}
+                                                                   for c in entry if c.tag != "bounds"]}
+                           for entry in entries if entry.tag != "head"],
+                "relations": [{"source": r.source, "target": r.target, "kind": r.kind, "grade": r.grade} for r in relations],
+            }
+            systems.append(EvidenceSystem(sid, tuple(measures), page.get("id"), structural))
     picture = root.find("picture")
     return EvidenceSheet(sheet_number, integer(picture.get("width")) if picture is not None else None,
-                         integer(picture.get("height")) if picture is not None else None, interline, tuple(systems))
+                         integer(picture.get("height")) if picture is not None else None, interline, tuple(systems),
+                         pages=tuple({"id": page.get("id"), "bounds": bounds(page),
+                                      "system_ids": [s.get("id") for s in page.findall("system")],
+                                      "origin": "SOURCE_OBSERVATION", "coordinate_space": "AUDIVERIS_SHEET_PIXELS"}
+                                     for page in root.findall("page")))
 
 
 def _pitch(position, clef, staff, box):

@@ -69,7 +69,7 @@ def test_tied_insertion_preservation_history_and_transpose(workflow, monkeypatch
     assert request(client, edited, 'transpose', {'semitones': 0}).status_code == 409
 
 
-@pytest.mark.parametrize('fields', [dict(pitch=dict(step='B', octave=4)), dict(voice='1'), dict(staff=1), dict(grace=True), dict(kind='rest', pitch=None), dict(tie_to_event_id='e-1'), dict(duration='4')])
+@pytest.mark.parametrize('fields', [dict(kind='rest', pitch=None), dict(tie_to_event_id='e-1')])
 def test_unsafe_ties_are_rejected_atomically(workflow, fields):
     client, _ = workflow
     baseline = create(client, XML)
@@ -79,13 +79,13 @@ def test_unsafe_ties_are_rejected_atomically(workflow, fields):
     assert loaded['revision'] == baseline['revision'] and xml(loaded) == XML
 
 
-def test_later_endpoint_edit_blocks_verification_and_undo_restores(workflow):
+def test_later_pitch_edit_is_advisory_and_undo_restores(workflow):
     client, _ = workflow
     corrected = insert(client, create(client, XML)).json()
     changed = patch(client, corrected, pitch=dict(step='B', octave=4))
-    assert any(d['code'] == 'invalid_manual_tie' for d in changed['validation']['diagnostics'])
-    assert request(client, changed, 'verify', {'confirmed_source_comparison': True}).status_code == 409
-    undo = request(client, changed, 'undo').json()
+    assert any(d['code'] == 'tie_pitch_mismatch' and not d['blocking'] for d in changed['validation']['diagnostics'])
+    verified = verify(client, changed)
+    undo = request(client, verified, 'undo').json()
     assert undo['validation']['error_count'] == 0 and xml(undo) == xml(corrected)
 
 
@@ -100,11 +100,11 @@ def test_deleting_endpoint_cleans_owned_counterpart_and_is_undoable(workflow, de
     assert xml(request(client, deleted, 'undo').json()) == xml(corrected)
 
 
-def test_overfilled_untied_insertion_blocks_verification(workflow):
+def test_overfilled_untied_insertion_is_source_authoritative(workflow):
     client, _ = workflow
     result = insert(client, create(client, XML), duration='4', tie_to_event_id=None).json()
-    assert any(d['code'] == 'measure_overfilled' and d['severity'] == 'ERROR' for d in result['validation']['diagnostics'])
-    assert request(client, result, 'verify', {'confirmed_source_comparison': True}).status_code == 409
+    assert any(d['code'] == 'measure_overfilled' and d['severity'] == 'WARNING' and not d['blocking'] for d in result['validation']['diagnostics'])
+    assert request(client, result, 'verify', {'confirmed_source_comparison': True}).status_code == 200
 
 
 @pytest.mark.parametrize('namespace', ['', 'http://www.musicxml.org/ns/musicxml'])
@@ -140,7 +140,9 @@ def test_existing_target_stop_is_not_duplicated_or_removed_on_delete(workflow):
     original = XML.replace(b'<voice>2</voice><type>quarter</type><staff>2</staff><notations>', b'<tie type="stop"/><voice>2</voice><type>quarter</type><staff>2</staff><notations><tied type="stop"/>')
     corrected = insert(client, create(client, original)).json()
     target = ET.fromstring(xml(corrected)).findall('.//note')[2]
-    assert len(target.findall('tie')) == len(target.findall('notations/tied')) == 1
+    assert len(target.findall('tie')) == 1
+    assert len(target.findall('notations/tied')) == 2
+    assert len([n for n in target.findall('notations/tied') if n.get('id')]) == 1
     deleted = request(client, corrected, f'events/{inserted(corrected)["id"]}', method='DELETE').json()
     assert ET.tostring(ET.fromstring(xml(deleted)).findall('.//note')[1]) == ET.tostring(ET.fromstring(original).findall('.//note')[1])
 
@@ -148,8 +150,21 @@ def test_existing_target_stop_is_not_duplicated_or_removed_on_delete(workflow):
 def test_simultaneous_insert_preserves_chord_onset_and_accidental(workflow):
     client, _ = workflow
     original = XML.replace(b'<rest/>', b'<pitch><step>C</step><octave>4</octave></pitch>').replace(b'<duration>4</duration>', b'<duration>8</duration>', 1).replace(b'<type>quarter</type>', b'<type>half</type>', 1).replace(b'<step>A</step>', b'<step>A</step><alter>1</alter>')
-    result = insert(client, create(client, original), before_event_id=None, chord_with_id='e-1', pitch=dict(step='A', alter='1', octave=4)).json()
+    result = insert(client, create(client, original), before_event_id=None, chord_with_id='e-1', duration='2', pitch=dict(step='A', alter='1', octave=4)).json()
     added = inserted(result)
     assert added['chord_member'] and added['onset'] == '0' and added['duration'] == '2'
     assert added['pitch']['alter'] == '1' and added['ties'] == ['start']
     assert result['validation']['error_count'] == 0
+
+
+@pytest.mark.parametrize('fields', [dict(pitch=dict(step='B', octave=4)), dict(voice='1'), dict(staff=1), dict(grace=True), dict(duration='4')])
+def test_musically_unusual_tied_insertion_is_advisory(workflow, fields):
+    client, _ = workflow
+    baseline = create(client, XML)
+    result = insert(client, baseline, **fields)
+    assert result.status_code == 200, result.text
+    corrected = result.json()
+    assert event(corrected)['pitch'] == event(baseline)['pitch']
+    assert inserted(corrected)['tie_target_id'] == 'e-2'
+    assert any(d['category'] == 'MUSIC_WARNING' and not d['blocking'] for d in corrected['validation']['diagnostics'])
+    assert verify(client, corrected)['state'] == 'VERIFIED'

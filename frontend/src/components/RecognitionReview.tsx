@@ -1,10 +1,17 @@
+import { chooseScoreFile, writeScoreFile, type ScoreFileHandle, type SavedScoreFile } from '../utils/localScoreFile'
+import { currentLyric, type LyricBinding } from '../utils/lyricInteraction'
 import { useRef, useState } from 'react'
-import { changeReview, closeReview, getReview, getVerifiedMusicXml } from '../services/api'
-import type { Harmony, Measure, ReviewIssue, ReviewSession, ScoreSelection } from '../types/review'
+import { changeReview, checkReviewMusic, closeReview, getReview, getVerifiedMusicXml } from '../services/api'
+import type { MusicCheckResult, Harmony, Measure, ReviewSession, ScoreSelection } from '../types/review'
 import EventInspector from './EventInspector'
 import { eventLabel, validDuration } from '../utils/review'
 import MusicSheetViewer from './MusicSheetViewer'
 import SourceViewer from './SourceViewer'
+import VisualNoteEditor, { AuxiliaryLyricNotice } from './VisualNoteEditor'
+import MusicalPositionEditor from './MusicalPositionEditor'
+import ScoreCorrectionToolbar from './ScoreCorrectionToolbar'
+import type { VisualInsertionPosition } from '../utils/scoreInsertion'
+import { auxiliaryLyricOwner, friendlyDiagnostic, sessionExpired } from '../utils/visualReview'
 
 type Change = (path: string, method: 'POST' | 'PATCH' | 'DELETE', body?: unknown) => Promise<void>
 
@@ -53,21 +60,6 @@ function HarmonyEditor({ harmony, measure, busy, change }: { harmony?: Harmony; 
   </fieldset>
 }
 
-function IssueHandling({ issue, busy, change }: { issue: ReviewIssue; busy: boolean; change: Change }) {
-  const [note, setNote] = useState('')
-  return <div>
-    {issue.handling.note && <p>Handling: {issue.handling.note}</p>}
-    {issue.status === 'REVIEW_REQUIRED' && <>
-      <label>Correction / source comparison note <input disabled={busy} value={note} maxLength={2000}
-        onChange={(event) => setNote(event.target.value)} /></label>
-      <button type="button" disabled={busy || !note.trim() || !issue.can_mark_corrected}
-        onClick={() => void change('issues/resolve', 'POST', { issue_id: issue.id, disposition: 'MANUALLY_CORRECTED', note })}>Confirm related correction</button>
-      <button type="button" disabled={busy || !note.trim()}
-        onClick={() => void change('issues/resolve', 'POST', { issue_id: issue.id, disposition: 'ACCEPTED', note })}>Accept after source comparison</button>
-    </>}
-  </div>
-}
-
 function EmptyMeasureAdder({ measure, busy, change }: { measure: Measure; busy: boolean; change: Change }) {
   const [step, setStep] = useState('C')
   const [octave, setOctave] = useState(4)
@@ -89,45 +81,74 @@ interface Props {
   onChange: (review: ReviewSession | null) => void
   onBusy: (busy: boolean) => void
   download: (blob: Blob, filename: string) => void
+  savedFile?: SavedScoreFile | null
+  onSaved?: (file: SavedScoreFile) => void
+  transposed?: Blob | null
 }
 
-export default function RecognitionReview({ review, onChange, onBusy, download }: Props) {
+export default function RecognitionReview({ review, onChange, onBusy, download, transposed = null, savedFile = null, onSaved }: Props) {
+  const [musicCheck, setMusicCheck] = useState<MusicCheckResult | null>(null)
+  const [advanced, setAdvanced] = useState(false)
+  const [rightView, setRightView] = useState('corrected')
+  const [positionStaff, setPositionStaff] = useState(1)
+  const [adding, setAdding] = useState(false)
+  const [insertionPosition, setInsertionPosition] = useState<VisualInsertionPosition | null>(null)
+  const [tieSource, setTieSource] = useState('')
+  const [expired, setExpired] = useState(false)
   const [measureId, setMeasureId] = useState('')
   const [voiceId, setVoiceId] = useState('')
-  const [eventId, setEventId] = useState('')
+  const [eventId, setEventId] = useState('-')
   const [busy, setBusy] = useState(false)
   const pending = useRef(false)
-  const [candidateId, setCandidateId] = useState('')
   const [error, setError] = useState('')
-  const [confirmedRevision, setConfirmedRevision] = useState<number | null>(null)
+  const fileHandle = useRef<ScoreFileHandle | null>(null)
+  const [filename, setFilename] = useState('concert-score.musicxml')
+  const [pendingDownload, setPendingDownload] = useState<SavedScoreFile | null>(null)
+  const [saveMessage, setSaveMessage] = useState('')
+  const saved = savedFile?.reviewId === review.id && savedFile.revision === review.revision
   const measures = review.score.parts.flatMap((part) => part.measures.map((measure) => ({ part, measure })))
   const current = measures.find((entry) => entry.measure.id === measureId) ?? measures[0]
   const measure = current?.measure
   const voice = measure?.voices.find((item) => item.id === voiceId) ?? measure?.voices[0]
-  const event = voice?.events.find((item) => item.id === eventId) ?? voice?.events[0]
-  const selectedIssue = review.review_issues.find((issue) => issue.id === candidateId
-    && (issue.event_id ?? issue.anchor_id) === event?.id)
-    ?? review.review_issues.find((issue) => (issue.event_id ?? issue.anchor_id) === event?.id)
-  const tieTargets = current?.part.measures.filter((m) => m.index === measure?.index || m.index === (measure?.index ?? -2) + 1)
-    .flatMap((m) => m.voices.flatMap((v) => v.events.filter((e) => e.kind === 'note' && !e.grace)
-      .map((e) => ({ id: e.id, label: `Measure ${m.number} · voice ${e.voice} · ${eventLabel(e)}` })))) ?? []
+  const event = eventId === '-' ? undefined : voice?.events.find((item) => item.id === eventId) ?? (eventId ? undefined : voice?.events[0])
+  const tieTargets = current?.part.measures.flatMap((m) => m.voices.flatMap((v) => v.events.filter((e) => e.kind === 'note')
+    .map((e) => ({ id: e.id, label: `Measure ${m.number} · voice ${e.voice} · ${eventLabel(e)}` })))) ?? []
   const selectedId = event?.id
   const selectedIndex = measure?.index
   const selectedOnset = event?.onset ?? null
-  const selectedLabel = measure && event ? `${current.part.name || current.part.id}, measure ${measure.number}, voice ${event.voice}, ${eventLabel(event)}` : ''
+  const selectedLabel = !advanced ? `A ${event?.kind === 'rest' ? 'rest' : 'note'}` : measure && event ? `${current.part.name || current.part.id}, measure ${measure.number}, voice ${event.voice}, ${eventLabel(event)}` : ''
   const selection: ScoreSelection | null = selectedId && selectedIndex !== undefined ? {
     eventId: selectedId, measureIndex: selectedIndex, onset: selectedOnset, label: selectedLabel,
   } : null
 
-  async function perform(action: () => Promise<ReviewSession | null>) {
-    if (pending.current) return
+  function selectEvent(id: string) {
+    if (busy || expired) return
+    if (tieSource) {
+      const source = measures.flatMap(({ measure: m }) => m.voices.flatMap((v) => v.events)).find((e) => e.id === tieSource)
+      if (source && id !== source.id && measures.some(({ measure: m }) => m.voices.some(v => v.events.some(e => e.id === id && e.kind === 'note' && e.pitch)))) {
+        setTieSource('')
+        void change(`events/${source.id}`, 'PATCH', { tie_to_event_id: id })
+      }
+      return
+    }
+    setAdding(false); setInsertionPosition(null)
+    const target = measures.find(({ measure: m }) => m.voices.some((v) => v.events.some((e) => e.id === id)))
+    const selected = target?.measure.voices.flatMap((v) => v.events).find((e) => e.id === id)
+    if (target && selected) { setMeasureId(target.measure.id); setVoiceId(selected.voice); setEventId(id) }
+  }
+  const tieTargetIds = tieSource ? measures.flatMap(({ measure: m }) => m.voices.flatMap(v => v.events)).filter(e => e.id !== tieSource && e.kind === 'note' && e.pitch).map(e => e.id) : null
+
+  async function perform(action: () => Promise<ReviewSession | null>, propagate = false) {
+    if (pending.current) { if (propagate) throw new Error('Another correction is pending.'); return }
     pending.current = true
+    setTieSource('')
     setBusy(true)
     onBusy(true)
     setError('')
     try {
       const updated = await action()
       if (updated) {
+        setAdding(false); setInsertionPosition(null)
         const oldIds = new Set(review.score.parts.flatMap((p) => p.measures.flatMap((m) => m.voices.flatMap((v) => v.events.map((e) => e.id)))))
         const entries = updated.score.parts.flatMap((p) => p.measures.flatMap((m) =>
           m.voices.flatMap((v) => v.events.map((e) => ({ measureId: m.id, event: e })))))
@@ -137,11 +158,16 @@ export default function RecognitionReview({ review, onChange, onBusy, download }
           setMeasureId(selected.measureId)
           setVoiceId(selected.event.voice)
           setEventId(selected.event.id)
+        } else {
+          setEventId('-')
         }
+        setExpired(false)
       }
-      if (updated !== review) onChange(updated)
+      if (updated && (updated.revision !== review.revision || updated.state !== review.state)) onChange(updated)
     } catch (cause) {
+      if (sessionExpired(cause)) setExpired(true)
       setError(cause instanceof Error ? cause.message : 'Correction failed. Reload the review and try again.')
+      if (propagate) throw cause
     } finally {
       pending.current = false
       setBusy(false)
@@ -149,67 +175,196 @@ export default function RecognitionReview({ review, onChange, onBusy, download }
     }
   }
 
+  async function checkScore() {
+    if (pending.current || expired) return
+    pending.current = true; setBusy(true); onBusy(true); setError('')
+    try { setMusicCheck(await checkReviewMusic(review)) }
+    catch (cause) {
+      if (sessionExpired(cause)) setExpired(true)
+      setError(cause instanceof Error ? cause.message : 'Unable to check the score. Corrections remain unchanged.')
+    } finally { pending.current = false; setBusy(false); onBusy(false) }
+  }
+
+  const showingTransposed = !!transposed && rightView === 'transposed'
   const change: Change = (path, method, body) => perform(() => changeReview(review, path, method, body))
+  const lyricScope = { reviewId: review.id, revision: review.revision, score: review.score }
+  const applyDirectLyric = async (binding: LyricBinding, text: string) => {
+    if (busy || expired || showingTransposed || adding || tieSource || !currentLyric(binding, lyricScope))
+      throw new Error('This lyric or editing mode changed. Reopen it in the current score.')
+    let saved: ReviewSession | null = null
+    await perform(async () => {
+      saved = await changeReview(review, `lyrics/${binding.lyricId}`, 'PATCH', { text, segment_index: 0 })
+      return saved
+    }, true)
+    const updated = saved as ReviewSession | null
+    const lyric = updated?.score.lyrics.find(l => l.id === binding.lyricId && l.event_id === binding.eventId && l.number === binding.originalVerse)
+    if (!updated || !lyric) throw new Error('The returned review did not confirm the canonical lyric. Reload review.')
+    return { lyric, reviewId: updated.id, revision: updated.revision }
+  }
+  const selectDirectLyricOwner = (id: string | null) => {
+    if (busy || expired || showingTransposed || adding || tieSource) return
+    if (id === null) { setAdvanced(true); return }
+    const owners = review.score.lyrics.filter(l => l.id === id)
+    if (owners.length !== 1) return
+    const target = measures.find(({ measure: m }) => m.voices.some(v => v.events.some(e => e.id === owners[0].event_id)))
+    const selected = target?.measure.voices.flatMap(v => v.events).find(e => e.id === owners[0].event_id)
+    // Explicit selection only. Never route this action through the pending-tie selectEvent handler.
+    if (target && selected) {
+      setMeasureId(target.measure.id); setVoiceId(selected.voice); setEventId(selected.id); setAdvanced(true)
+      setError(`Selected canonical lyric ${id}, verse ${owners[0].number}. Use T (Lyric) or Lyrics on selected event in Advanced Review.`)
+    }
+  }
+  const lyricOwner = auxiliaryLyricOwner(review.score, event)
+  const selectLyricOwner = () => {
+    if (!lyricOwner || !measure || busy || expired || showingTransposed) return
+    // This action only selects; it must not complete a pending tie command.
+    setTieSource(''); setAdding(false); setInsertionPosition(null)
+    setMeasureId(measure.id); setVoiceId(lyricOwner.voice); setEventId(lyricOwner.id)
+  }
+
+  async function saveScore(saveAs: boolean) {
+    if (busy || expired || pending.current) return
+    setPendingDownload(null)
+    setSaveMessage('')
+    await perform(async () => {
+      if (!review.validation.can_verify) {
+        const failures = review.validation.diagnostics.filter(issue => issue.blocking).map(issue => issue.message)
+        throw new Error(`Cannot save: ${failures.join(' ') || 'Correct the technical score errors shown in Advanced Review.'}`)
+      }
+      const target = await chooseScoreFile(saveAs, fileHandle.current, filename)
+      if (!target) return review
+      const validated = review.state === 'VERIFIED' ? review
+        : await changeReview(review, 'verify', 'POST', { confirmed_source_comparison: true })
+      // Publish validation state even if the subsequent filesystem operation fails.
+      if (validated !== review) onChange(validated)
+      const blob = await getVerifiedMusicXml(validated.id)
+      const snapshot = { reviewId: validated.id, revision: validated.revision, blob, filename: target.filename }
+      const result = await writeScoreFile(blob, target, download)
+      setFilename(target.filename)
+      if (result === 'written') {
+        fileHandle.current = target.handle
+        onSaved?.(snapshot)
+        setSaveMessage(`Saved to ${target.filename}. Save writes this chosen file; Save As chooses another destination.`)
+      } else {
+        setPendingDownload(snapshot)
+        setSaveMessage(`Download requested: ${target.filename}. This browser cannot overwrite a file or confirm download completion. Check your downloads, then confirm below.`)
+      }
+      return validated
+    })
+  }
 
   return <section className="status-card recognition-review">
-    <h2>Recognition Review — <span className={`review-state state-${review.state}`}>{review.state.replaceAll('_', ' ')}</span></h2>
-    <p role="status">{busy ? 'Applying correction / validating…' : review.state === 'VERIFIED'
-      ? 'Approved for transposition and export.' : `${review.validation.unresolved_issue_count} unresolved issues · ${review.validation.error_count} blocking errors. Correct or explicitly handle issues, then verify.`}</p>
-    <p>Compare with the original. Structural validation cannot establish recognition accuracy. Corrections do not run Audiveris again.</p>
-    <p className="review-hint">This local session expires at {new Date(review.expires_at * 1000).toLocaleTimeString()}. Download corrected XML before closing or restarting the backend.</p>
+    <h2>Score Editor</h2>
+    <p role="status">{busy ? 'Applying changes…' : saved ? `Saved: ${savedFile?.filename}` : 'Unsaved changes — save the Working Score to a local MusicXML file.'}</p>
+    <p>Save confirms the current Working Score as your Canonical Concert Score. Keep the local file; editing sessions are temporary.</p>
+    {saveMessage && (saved || pendingDownload?.revision === review.revision) && <p role="status">{saveMessage}</p>}
+    {pendingDownload && pendingDownload.reviewId === review.id && pendingDownload.revision === review.revision && <button disabled={busy} onClick={() => {
+      onSaved?.(pendingDownload); setPendingDownload(null)
+      setSaveMessage('You confirmed that the downloaded MusicXML file was saved locally.')
+    }}>I saved the downloaded file</button>}
     <div className="review-toolbar">
-      <button disabled={busy || !review.can_undo} onClick={() => void change('undo', 'POST')}>Undo</button>
-      <button disabled={busy || !review.can_redo} onClick={() => void change('redo', 'POST')}>Redo</button>
+      <button disabled={busy || expired || !review.can_undo} onClick={() => void change('undo', 'POST')}>Undo</button>
+      <button disabled={busy || expired || !review.can_redo} onClick={() => void change('redo', 'POST')}>Redo</button>
       <button disabled={busy} onClick={() => void perform(() => getReview(review.id))}>Reload review</button>
-      <button disabled={busy} onClick={() => download(review.musicXml, review.state === 'VERIFIED' ? 'verified.musicxml' : 'review-draft.musicxml')}>Download corrected XML</button>
-      <button disabled={busy || review.state !== 'VERIFIED'} onClick={() => void perform(async () => {
-        download(await getVerifiedMusicXml(review.id), 'corrected-verified.musicxml')
-        return review
-      })}>Export verified corrected MusicXML</button>
+      <button disabled={busy || expired} onClick={() => void saveScore(false)}>Save</button>
+      <button disabled={busy || expired} onClick={() => void saveScore(true)}>Save As</button>
+      <button disabled={busy || !savedFile} onClick={() => {
+        if (savedFile) download(savedFile.blob, savedFile.filename)
+      }}>Export saved MusicXML</button>
+      {savedFile && !saved && <span>Export uses the last saved version. Save to include current edits.</span>}
       <button disabled={busy} onClick={() => void perform(async () => { await closeReview(review.id); return null })}>Close review</button>
     </div>
-    {error && <p role="alert" className="status-error">{error}</p>}
-    <details open>
-      <summary>Review issues ({review.validation.unresolved_issue_count} unresolved)</summary>
-      <p>Evidence retains its original confidence and reasons. Apply corrections, then confirm handling with a note, or explicitly accept notation after source comparison. Handling does not prove OMR accuracy.</p>
-      {!review.review_issues.length && <p>No candidate issues recorded. Compare the whole score with the source before verification.</p>}
-      <ul>{review.review_issues.map((candidate) => <li key={candidate.id}>
-        <strong>{candidate.status.replaceAll('_', ' ')}</strong> · {candidate.classification.replaceAll('_', ' ')} · {candidate.confidence}
-        {candidate.pitch && ` · ${candidate.pitch.step} (alter ${candidate.pitch.alter}) ${candidate.pitch.octave}`}
-        {` · page ${candidate.evidence.sheet}, staff ${candidate.evidence.staff_number ?? '?'}, head ${candidate.evidence.id}`}
-        <p>{candidate.diagnostics.map((reason) => reason.replaceAll('_', ' ')).join('; ')}.</p>
-        <button disabled={busy || !measures.some(({ measure: m }) => m.voices.some((v) => v.events.some((e) => e.id === (candidate.event_id ?? candidate.anchor_id))))}
-          onClick={() => {
-            const id = candidate.event_id ?? candidate.anchor_id
-            const target = measures.find(({ measure: m }) => m.voices.some((v) => v.events.some((e) => e.id === id)))
-            const targetVoice = target?.measure.voices.find((v) => v.events.some((e) => e.id === id))
-            if (target && targetVoice && id) { setCandidateId(candidate.id); setMeasureId(target.measure.id); setVoiceId(targetVoice.id); setEventId(id) }
-          }}>Inspect related event and source</button>
-        <IssueHandling key={`${review.revision}-${candidate.id}`} issue={candidate} busy={busy} change={change} />
-      </li>)}</ul>
-      {review.semantic_recovery?.diagnostics.length ? <p>{review.semantic_recovery.diagnostics.map((reason) => reason.replaceAll('_', ' ')).join('; ')}.</p> : null}
+    <div className="review-toolbar" aria-label="Review mode">
+      <button aria-pressed={!advanced} onClick={() => { setAdvanced(false); setTieSource(''); setAdding(false); setInsertionPosition(null) }}>Visual Review</button>
+      <button aria-pressed={advanced} onClick={() => { setAdvanced(true); setTieSource(''); setAdding(false); setInsertionPosition(null) }}>Advanced Review</button>
+    </div>
+    <p>See the mistake → click it → correct it. Click a notehead, or focus it and press Enter. When a note cannot be mapped safely, use Advanced Review.</p>
+    {expired && <div role="alert" className="status-error">This editing session expired. Open your saved MusicXML to continue, or download an unvalidated recovery copy of the browser-held edits.
+      <button onClick={() => download(review.musicXml, 'unsaved-recovery.musicxml')}>Download recovery copy</button>
+    </div>}
+
+    <fieldset disabled={expired} className="visual-review-body">
+    <details className="review-validation" hidden={!advanced}>
+    <summary>Technical score details</summary>
+    <ul className="review-diagnostics">{review.validation.diagnostics.filter(issue => issue.blocking).map((issue, index) => <li key={index}>
+      {issue.message}{issue.event_id && <button disabled={busy} onClick={() => selectEvent(issue.event_id!)}>Inspect event</button>}
+    </li>)}</ul>
+    </details>
+    <details className="review-music-check">
+      <summary>Optional music check</summary>
+      <p>Check score offers musical review suggestions. It never changes notation and is not required before Save.</p>
+      <button disabled={busy || expired} onClick={() => void checkScore()}>Check score</button>
+      {musicCheck && musicCheck.revision !== review.revision && <p role="status">The score revision changed. Run Check score again for current results.</p>}
+      {musicCheck?.revision === review.revision && <div role="status">
+        <p>{musicCheck.warning_count} music warnings · {musicCheck.technical_error_count} technical errors. No score changes were made.</p>
+        <ul>{musicCheck.diagnostics.filter((issue) => issue.category === 'MUSIC_WARNING').map((issue) => <li key={issue.id ?? `${issue.code}-${issue.event_id}-${issue.measure_id}`}>
+          {friendlyDiagnostic(issue.code, issue.message)}
+          {issue.can_confirm_source && <SourceDiagnosticConfirmation key={`${review.revision}-${issue.id}`} issue={issue} measureLabel={measures.find(({ measure: m }) => m.id === issue.measure_id)?.measure.number} busy={busy || expired} change={change} />}
+        </li>)}</ul>
+        {musicCheck.truncated && <p>Additional findings were omitted.</p>}
+      </div>}
     </details>
     <div className="review-comparison">
-      <SourceViewer review={review} location={selectedIssue?.source_location ?? null} />
-      <div className="review-score"><MusicSheetViewer musicXml={review.musicXml} title="Corrected score" selection={selection} /></div>
+      <SourceViewer review={review} location={null} />
+      <div className="review-score">
+    {error && <div role="alert" className="status-error">{error}{!advanced && <details><summary>Show technical details</summary>{error}</details>}</div>}
+        <div role="toolbar" aria-label="Right pane view">
+          <button aria-pressed={!showingTransposed} onClick={() => setRightView('corrected')}>Corrected</button>
+          <button disabled={!transposed} aria-pressed={showingTransposed} onClick={() => { setRightView('transposed'); setTieSource(''); setAdding(false); setInsertionPosition(null) }}>Transposed</button>
+        </div>
+        <ScoreCorrectionToolbar key={`tools-${review.revision}-${event?.id ?? 'none'}-${adding}-${insertionPosition?.measureId ?? ''}-${insertionPosition?.staff ?? ''}`} review={review} event={event} measure={measure}
+          lyricOwner={lyricOwner} selectLyricOwner={selectLyricOwner}
+          anchorPosition={() => { if (event?.onset != null && event?.staff && measure) setInsertionPosition({ measureId: measure.id, onset: event.onset, staff: event.staff }) }}
+          position={insertionPosition} adding={adding} tying={!!tieSource} disabled={busy || expired} readOnly={showingTransposed} change={change}
+          select={() => { setAdding(false); setInsertionPosition(null); setTieSource('') }}
+          add={() => { setAdding(!adding); setInsertionPosition(null); setTieSource('') }}
+          tie={() => { setAdding(false); setInsertionPosition(null); setTieSource(tieSource ? '' : event?.id ?? '') }}
+          advanced={() => { setAdvanced(true); setTieSource(''); setAdding(false); setInsertionPosition(null) }} />
+        <MusicSheetViewer lyricScope={lyricScope} onLyricApply={applyDirectLyric} onLyricOwnerSelect={selectDirectLyricOwner} musicXml={showingTransposed ? transposed : review.musicXml} title={showingTransposed ? 'Transposed score' : 'Working score'} selection={showingTransposed ? null : selection} score={review.score} onSelect={showingTransposed ? undefined : selectEvent} tieTargetIds={showingTransposed ? null : tieTargetIds} interactive={!showingTransposed && !busy && !expired}
+          onPitchDrop={(id, pitch) => { if (!busy && !expired && !showingTransposed && !adding && !tieSource) void change(`events/${id}`, 'PATCH', { pitch }) }}
+          insertionMode={!showingTransposed && adding} insertionPosition={insertionPosition} onPositionSelect={(position) => {
+            if (busy || expired || showingTransposed) return
+            setInsertionPosition(position)
+            if (position) { setMeasureId(position.measureId); setPositionStaff(position.staff); setError('') }
+            else setError('No unique supported musical position here. Click inside an empty measure or near an existing note position; Advanced retains exact placement controls.')
+          }} />
+        {showingTransposed && <p>Read-only transposition of the verified corrected master. Switch to Corrected to edit.</p>}
+      </div>
     </div>
+    {advanced && !showingTransposed && <h3>Advanced correction</h3>}
+    {advanced && !showingTransposed && <div className="review-fields">
+      <button disabled={busy || expired} onClick={() => { setAdding(!adding); setTieSource('') }}>Add at musical position</button>
+      <label>Correction measure <select aria-label="Correction measure" disabled={busy} value={measure?.id ?? ''} onChange={(e) => { setMeasureId(e.target.value); setVoiceId(''); setEventId('-'); setPositionStaff(1); setTieSource('') }}>
+        {measures.map(({ part, measure: m }) => <option key={m.id} value={m.id}>{part.name || 'Part'} · measure {m.number}</option>)}
+      </select></label>
+      {adding && <label>Insertion staff <select aria-label="Insertion staff" value={positionStaff} onChange={(e) => setPositionStaff(Number(e.target.value))}>
+        {Array.from({ length: measure?.staves ?? 1 }, (_, i) => <option key={i + 1} value={i + 1}>Staff {i + 1}</option>)}
+      </select></label>}
+    </div>}
+    {advanced && !showingTransposed && adding && measure && <MusicalPositionEditor key={`position-${review.revision}-${measure.id}-${positionStaff}`} measure={measure} staff={positionStaff} voices={Array.from(new Set(['1', ...measure.voices.map((v) => v.id)]))} busy={busy || expired} change={change} />}
+    {advanced && !showingTransposed && event && measure && <VisualNoteEditor key={`visual-${review.revision}-${event.id}`} event={event} measure={measure} measures={measures.map(({ part, measure: m }) => ({ id: m.id, label: `${part.name || "Part"} · measure ${m.number}`, staves: m.staves }))}
+      lyricOwner={lyricOwner} selectLyricOwner={selectLyricOwner}
+      lyrics={review.score.lyrics.filter((lyric) => lyric.event_id === event.id)} busy={busy || expired} change={change}
+      startTie={() => setTieSource(event.id)} advanced={() => { setAdvanced(true); setTieSource(''); setAdding(false); setInsertionPosition(null) }} />}
+
+    <div hidden={!advanced || showingTransposed} aria-label="Advanced correction">
     <p className="review-hint">Select events below. The cursor marks measure/beat, with pitch, voice and staff identified in the inspector. OSMD’s mixed-size chord preview may differ from the original; per-note sizes and timing remain in the XML.</p>
     <div className="review-fields review-navigator">
-      <label>Part / measure <select disabled={busy} value={measure?.id ?? ''} onChange={(e) => { setMeasureId(e.target.value); setVoiceId(''); setEventId('') }}>
+      <label>Part / measure <select disabled={busy} value={measure?.id ?? ''} onChange={(e) => { setTieSource(''); setMeasureId(e.target.value); setVoiceId(''); setEventId('') }}>
         {measures.map(({ part, measure: m }) => <option key={m.id} value={m.id}>{part.name || part.id} · measure {m.number} ({m.validation_state})</option>)}
       </select></label>
-      <label>Voice <select disabled={busy || !voice} value={voice?.id ?? ''} onChange={(e) => { setVoiceId(e.target.value); setEventId('') }}>
+      <label>Voice <select disabled={busy || !voice} value={voice?.id ?? ''} onChange={(e) => { setTieSource(''); setVoiceId(e.target.value); setEventId('') }}>
         {measure?.voices.map((v) => <option key={v.id}>{v.id}</option>)}
       </select></label>
-      <label>Event <select disabled={busy || !event} value={event?.id ?? ''} onChange={(e) => setEventId(e.target.value)}>
-        {voice?.events.map((item) => <option key={item.id} value={item.id}>{eventLabel(item)}</option>)}
+      <label>Event <select disabled={busy || !voice?.events.length} value={event?.id ?? ''} onChange={(e) => { setTieSource(''); setEventId(e.target.value) }}>
+        {!event && <option value="">Choose an event</option>}{voice?.events.map((item) => <option key={item.id} value={item.id}>{eventLabel(item)}</option>)}
       </select></label>
     </div>
     {measure && <p>Timing: {measure.actual_duration ?? '?'} / {measure.expected_duration ?? '?'} quarter beats. Divisions: {measure.divisions ?? '?'}. Staff count: {measure.staves}.</p>}
-    {selectedIssue && <p className="review-selection">Selected issue: {selectedIssue.status.replaceAll('_', ' ')} · {selectedIssue.confidence} · {selectedIssue.diagnostics.join('; ')}</p>}
     {event && measure ? <EventInspector key={`${review.revision}-${event.id}`} event={event} measure={measure} tieTargets={tieTargets} busy={busy} change={change} />
-      : measure && <EmptyMeasureAdder key={`${review.revision}-${measure.id}`} measure={measure} busy={busy} change={change} />}
-    <details>
+      : measure && !measure.voices.some((v) => v.events.length) && <EmptyMeasureAdder key={`${review.revision}-${measure.id}`} measure={measure} busy={busy} change={change} />}
+    </div>
+    <details hidden={!advanced || showingTransposed}>
       <summary>Title, lyrics and chord symbols</summary>
       <TextEditor key={`title-${review.revision}`} text={review.score.metadata.title} label="Score title" busy={busy}
         save={(text) => void change('metadata/title', 'PATCH', { text })} />
@@ -220,30 +375,16 @@ export default function RecognitionReview({ review, onChange, onBusy, download }
         (lyric.segments.length ? lyric.segments : ['']).map((text, index) => <TextEditor key={`${review.revision}-${lyric.id}-${index}`} text={text}
           label={`Verse ${lyric.number}${lyric.segments.length > 1 ? `, segment ${index + 1}` : ''}`} busy={busy}
           save={(value) => void change(`lyrics/${lyric.id}`, 'PATCH', { text: value, segment_index: index })} />))}
-      {event && <NewLyric key={`${review.revision}-${event.id}`} busy={busy} add={(text, number) => void change(`events/${event.id}/lyrics`, 'POST', { text, number })} />}
+      {event && (lyricOwner
+        ? <AuxiliaryLyricNotice owner={lyricOwner} busy={busy || expired} selectOwner={selectLyricOwner} />
+        : <NewLyric key={`${review.revision}-${event.id}`} busy={busy} add={(text, number) => void change(`events/${event.id}/lyrics`, 'POST', { text, number })} />)}
       <h3>Harmony in selected measure</h3>
       {measure && <>
         {review.score.harmonies.filter((h) => h.measure_id === measure.id).map((h) => <HarmonyEditor key={`${review.revision}-${h.id}`} harmony={h} measure={measure} busy={busy} change={change} />)}
         <HarmonyEditor key={`new-harmony-${review.revision}-${measure.id}`} measure={measure} busy={busy} change={change} />
       </>}
     </details>
-    <h3>Validation and verification</h3>
-    <p>{review.validation.error_count} errors · {review.validation.warning_count} warnings</p>
-    <ul className="review-diagnostics">{review.validation.diagnostics.map((issue, index) => <li key={`${issue.code}-${index}`} className={issue.severity === 'ERROR' ? 'status-error' : ''}>
-      <strong>{issue.severity}</strong>{issue.measure_id && ` · ${measures.find((m) => m.measure.id === issue.measure_id)?.measure.number ?? issue.measure_id}`}: {issue.message}
-      {issue.event_id && <button disabled={busy} onClick={() => {
-        const target = measures.find(({ measure: m }) => m.voices.some((v) => v.events.some((e) => e.id === issue.event_id)))
-        const targetVoice = target?.measure.voices.find((v) => v.events.some((e) => e.id === issue.event_id))
-        if (target && targetVoice) { setMeasureId(target.measure.id); setVoiceId(targetVoice.id); setEventId(issue.event_id!); setCandidateId('') }
-      }}>Inspect event</button>}
-    </li>)}</ul>
-    {review.validation.truncated && <p>Additional diagnostics were omitted; all errors still block verification.</p>}
-    <button disabled={busy} onClick={() => void change('validate', 'POST')}>Validate corrections</button>
-    <label className="review-confirmation"><input type="checkbox" disabled={busy} checked={confirmedRevision === review.revision}
-      onChange={(e) => setConfirmedRevision(e.target.checked ? review.revision : null)} /> I compared this corrected score with the original, including pitches, sizes, rhythms, lyrics and chord symbols.</label>
-    <button disabled={busy || !review.validation.can_verify || confirmedRevision !== review.revision || review.state === 'VERIFIED'}
-      onClick={() => void change('verify', 'POST', { confirmed_source_comparison: true })}>Mark VERIFIED</button>
-    {review.state === 'VERIFIED' && <p className="status-success">Verified corrected MusicXML is ready for transposition. Any further correction requires verification again. <a href="#transposition-controls">Continue to transposition</a></p>}
+    </fieldset>
   </section>
 }
 
@@ -253,4 +394,16 @@ function NewLyric({ busy, add }: { busy: boolean; add: (text: string, number: st
   return <div className="review-fields"><label>New lyric <input disabled={busy} value={text} onChange={(e) => setText(e.target.value)} /></label>
     <label>Verse <input disabled={busy} value={number} onChange={(e) => setNumber(e.target.value)} /></label>
     <button disabled={busy || !text} onClick={() => add(text, number)}>Add lyric</button></div>
+}
+
+export function SourceDiagnosticConfirmation({ issue, measureLabel, busy, change }: { measureLabel?: string; issue: ReviewSession['validation']['diagnostics'][number]; busy: boolean; change: Change }) {
+  const [note, setNote] = useState('')
+  return <fieldset disabled={busy}>
+    <legend>Source comparison{measureLabel && ` — measure ${measureLabel}`}</legend>
+    <p>{friendlyDiagnostic(issue.code, issue.message)}</p>
+    {issue.source_confirmed ? <p>Confirmed against source: {issue.source_confirmation?.note}</p> : <>
+      <label>What matches the original source?<input aria-label="Source confirmation note" value={note} maxLength={2000} onChange={(e) => setNote(e.target.value)} /></label>
+      <button disabled={!note.trim() || !issue.id} onClick={() => void change('diagnostics/confirm-source', 'POST', { diagnostic_id: issue.id, note })}>This unusual notation matches the source</button>
+    </>}
+  </fieldset>
 }

@@ -86,16 +86,19 @@ def test_existing_tie_preserves_events_history_and_transpose(workflow, monkeypat
     (b'<octave>4</octave>', b'<alter>1</alter><octave>4</octave>'),
     (b'<duration>2</duration>', b'<grace/>'),
 ])
-def test_incompatible_target_rejected_without_edit(workflow, replacement):
+def test_unusual_target_is_user_correctable_without_changing_notes(workflow, replacement):
     client, _ = workflow
     # Replace only the second event's musical property.
     head, tail = XML.split(b'<note><!-- keep comment -->')
     original = create(client, head + b'<note><!-- keep comment -->' + tail.replace(*replacement))
     result = tie(client, original)
-    assert result.status_code == 422 and 'detail' in result.json(), result.text
-    loaded = client.get('/api/v1/reviews/' + original['id']).json()
-    assert loaded['revision'] == original['revision'] and xml(loaded) == xml(original)
-    assert event(loaded, 'e-1')['tie_target_ids'] == []
+    assert result.status_code == 200, result.text
+    after = result.json()
+    assert event(after, 'e-1')['tie_target_id'] == 'e-2'
+    assert 'e-2' in event(original, 'e-1')['tie_target_ids']
+    assert strip_tie(xml(after)) == strip_tie(xml(original))
+    assert any(d['category'] == 'MUSIC_WARNING' and not d['blocking'] for d in after['validation']['diagnostics'])
+
 
 
 @pytest.mark.parametrize('target,status', [('e-1', 422), ('missing', 404), ('m-1', 404), ('', 422)])
@@ -108,16 +111,18 @@ def test_invalid_ids_are_atomic(workflow, target, status):
     assert loaded['revision'] == original['revision'] and xml(loaded) == XML
 
 
-def test_earlier_target_and_stale_revision_rejected(workflow):
+def test_earlier_target_is_advisory_and_stale_revision_rejected(workflow):
     client, _ = workflow
     original = create(client, XML)
-    assert request(client, original, 'events/e-2', {'tie_to_event_id': 'e-1'}, 'PATCH').status_code == 422
-    updated = tie(client, original).json()
+    earlier = request(client, original, 'events/e-2', {'tie_to_event_id': 'e-1'}, 'PATCH')
+    assert earlier.status_code == 200
+    assert any(d['code'] == 'tie_timing' and not d['blocking'] for d in earlier.json()['validation']['diagnostics'])
+    updated = tie(client, earlier.json()).json()
     assert tie(client, original, None).status_code == 409
     assert request(client, updated, 'events/missing', {'tie_to_event_id': 'e-2'}, 'PATCH').status_code == 404
 
 
-def test_unrelated_blocking_error_and_warnings_remain(workflow):
+def test_unrelated_musical_warnings_remain_advisory(workflow):
     client, _ = workflow
     # Forward extends the measure: error survives a tie-only repair in that same measure.
     broken = XML.replace(b'<barline>', b'<forward><duration>4</duration></forward><barline>').replace(
@@ -128,11 +133,11 @@ def test_unrelated_blocking_error_and_warnings_remain(workflow):
     service = workflow[1]
     service.store.get(original['id']).document.manual_changes['m-1'] = ['events']
     original = client.get('/api/v1/reviews/' + original['id']).json()
-    assert original['validation']['error_count'] == 1
-    assert original['validation']['warning_count'] == 7
+    assert original['validation']['error_count'] == 0
+    assert original['validation']['warning_count'] == 8
     corrected = tie(client, original).json()
     assert corrected['validation'] == original['validation']
-    assert request(client, corrected, 'verify', {'confirmed_source_comparison': True}).status_code == 409
+    assert request(client, corrected, 'verify', {'confirmed_source_comparison': True}).status_code == 200
 
 
 def test_imported_tie_shows_target_and_can_be_removed(workflow):
@@ -198,7 +203,7 @@ def test_malformed_pitch_projects_diagnostic_without_crashing_discovery(workflow
 def test_combined_invalid_tie_and_pitch_patch_is_atomic(workflow):
     client, _ = workflow
     original = create(client, XML)
-    result = request(client, original, 'events/e-1', {'pitch': {'step': 'B', 'octave': 4}, 'tie_to_event_id': 'e-2'}, 'PATCH')
-    assert result.status_code == 422
+    result = request(client, original, 'events/e-1', {'pitch': {'step': 'B', 'octave': 4}, 'tie_to_event_id': 'missing'}, 'PATCH')
+    assert result.status_code == 404
     loaded = client.get('/api/v1/reviews/' + original['id']).json()
     assert xml(loaded) == XML and loaded['revision'] == original['revision']

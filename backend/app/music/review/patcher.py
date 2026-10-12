@@ -146,10 +146,17 @@ def duration_patch(doc, note, duration: str, divisions, grace=False):
 
 
 def patch_event(doc: Document, identifier: str, patch: EventPatch):
+    if "tie_direction" in patch.model_fields_set:
+        if patch.model_fields_set != {"tie_direction"} or patch.tie_direction is None:
+            raise ReviewError("Tie direction requires a direction-only correction (up or down).")
+        from .ties import set_direction
+        return set_direction(doc, identifier, patch.tie_direction)
     values = patch.model_dump(exclude_unset=True)
     tie_edit = "tie_to_event_id" in values
     values.pop("tie_to_event_id", None)
-    if (not values and not tie_edit) or any(value is None for value in values.values()):
+    values.pop("preserve_onsets", None)
+    values.pop("duration_scope", None)
+    if (not values and not tie_edit) or any(value is None for key, value in values.items() if key != "written_accidental"):
         raise ReviewError("Provide at least one non-null event correction.")
     note = doc.get(identifier, "note")
     measure, event = context(doc, note)
@@ -158,11 +165,19 @@ def patch_event(doc: Document, identifier: str, patch: EventPatch):
         raise ReviewError("Staff exceeds the part's declared staff count.")
     if patch.pitch:
         pitch_patch(doc, note, patch.pitch)
+    if "written_accidental" in patch.model_fields_set:
+        if patch.written_accidental is None:
+            remove(doc, note, "accidental")
+        else:
+            accidental_patch(doc, note, patch.written_accidental)
     if patch.staff is not None:
         put(doc, note, "staff", patch.staff)
     if patch.voice is not None:
         for member in members:
             put(doc, member, "voice", patch.voice)
+    leader = members[0]
+    preserve_position = patch.preserve_onsets or any(doc.refs.get(key) is leader for key in doc.positioned_events)
+    old_advance = (Fraction(0) if event.grace else rational(doc.text(leader, "duration")) / rational(event.divisions)) if preserve_position else None
     grace = patch.grace if patch.grace is not None else event.grace
     if patch.grace is not None:
         for member in members:
@@ -176,24 +191,59 @@ def patch_event(doc: Document, identifier: str, patch: EventPatch):
         if not grace and event.grace and patch.duration is None:
             raise ReviewError("Converting grace to a regular note requires an explicit duration.")
     if patch.duration is not None:
-        for member in members:
+        if patch.duration_scope == "note" and not grace and len(members) > 1:
+            requested = rational(patch.duration)
+            if requested is None:
+                raise ReviewError("Duration requires an exact rational value.")
+            index = members.index(note)
+            # MusicXML bounds each member by its immediate predecessor.
+            # A note-scoped edit can invalidate either neighboring adjacency.
+            if index > 0 and requested > rational(doc.text(members[index - 1], "duration")) / rational(event.divisions):
+                raise ReviewError("The chord member cannot exceed its preceding note; use explicit ownership to separate it.")
+            if index + 1 < len(members) and requested < rational(doc.text(members[index + 1], "duration")) / rational(event.divisions):
+                raise ReviewError("The chord note cannot become shorter than its following member; use explicit ownership to separate it.")
+        for member in ([note] if patch.duration_scope == "note" else members):
             duration_patch(doc, member, patch.duration, measure.divisions, grace)
+    if (patch.duration is not None or patch.grace is not None) and preserve_position:
+        new_advance = Fraction(0) if grace else rational(doc.text(leader, "duration")) / rational(event.divisions)
+        delta = old_advance - new_advance
+        if delta:
+            compensation = ET.Element(doc.namespace + ("forward" if delta > 0 else "backup"))
+            ET.SubElement(compensation, doc.namespace + "duration").text = str(int(abs(delta) * rational(event.divisions)))
+            parent = doc.parent(leader)
+            parent.insert(list(parent).index(members[-1]) + 1, compensation)
     if patch.display_size:
         size_patch(doc, note, patch.display_size)
     if tie_edit:
         from .ties import set_target
-        set_target(doc, identifier, patch.tie_to_event_id)
+        changed = set_target(doc, identifier, patch.tie_to_event_id)
+        if changed is False and patch.model_fields_set == {"tie_to_event_id"}:
+            return False
     doc.changed = True
 
 
 def add_event(doc: Document, identifier: str, request: EventAdd):
     measure = doc.get(request.measure_id, "measure")
+    if request.same_onset_id:
+        if any((request.onset is not None, request.after_event_id, request.before_event_id, request.chord_with_id)):
+            raise ReviewError("Choose one exact-onset anchor or another placement mode.")
+        anchor = doc.get(request.same_onset_id, "note")
+        if doc.parent(anchor) is not measure:
+            raise ReviewError("The onset anchor must belong to the requested measure.")
+        _, event = context(doc, anchor)
+        if event.onset is None or event.grace:
+            raise ReviewError("The onset anchor requires known duration-bearing timing.")
+        return add_at_position(doc, identifier, request.model_copy(update={
+            "same_onset_id": None, "onset": event.onset,
+            "voice": request.voice or event.voice, "staff": request.staff or event.staff}))
     if request.kind == "note" and request.pitch is None:
         raise ReviewError("A new pitched note requires pitch fields.")
     if request.kind == "rest" and (request.pitch is not None or request.grace or request.chord_with_id):
         raise ReviewError("A rest cannot have pitch, grace or chord membership.")
     if sum(bool(value) for value in (request.after_event_id, request.before_event_id, request.chord_with_id)) > 1:
         raise ReviewError("Choose a sequential anchor or a simultaneous anchor.")
+    if request.onset is not None:
+        return add_at_position(doc, identifier, request)
     anchor_id = request.chord_with_id or request.after_event_id or request.before_event_id
     anchor = doc.get(anchor_id, "note") if anchor_id else None
     if anchor is not None and doc.parent(anchor) is not measure:
@@ -215,12 +265,20 @@ def add_event(doc: Document, identifier: str, request: EventAdd):
         for tag in ("duration", "type", "dot", "time-modification", "stem"):
             for child in doc.children(anchor, tag):
                 note.append(deepcopy(child))
+        # Legacy chord requests without an explicit duration retain the anchor rhythm.
+        if "duration" in request.model_fields_set:
+            preceding = group(doc, anchor)[-1]
+            duration_patch(doc, note, request.duration, info.divisions)
+            if rational(request.duration) > rational(doc.text(preceding, "duration")) / rational(info.divisions):
+                raise ReviewError("A chord member cannot exceed the preceding duration; use exact-onset placement.")
         put(doc, note, "chord")
         # Type size copied from the anchor is replaced with the explicitly requested display size.
     else:
         if request.grace:
             put(doc, note, "grace")
         duration_patch(doc, note, request.duration, info.divisions, request.grace)
+    if request.written_accidental is not None:
+        accidental_patch(doc, note, request.written_accidental)
     put(doc, note, "voice", voice)
     put(doc, note, "staff", staff)
     size_patch(doc, note, request.display_size)
@@ -249,6 +307,15 @@ def delete_event(doc: Document, identifier: str):
         duration = doc.child(note, "duration")
         if duration is not None:
             put(doc, promoted, "duration", duration.text)
+    if identifier in doc.positioned_events and members[0] is note:
+        if len(members) > 1:
+            doc.positioned_events.add(next(key for key, node in doc.refs.items() if node is members[1]))
+        elif doc.child(note, "grace") is None:
+            parent = doc.parent(note)
+            compensation = ET.Element(doc.namespace + "forward")
+            ET.SubElement(compensation, doc.namespace + "duration").text = doc.text(note, "duration")
+            parent.insert(list(parent).index(note), compensation)
+    doc.positioned_events.discard(identifier)
     doc.parent(note).remove(note)
     removed = set(note.iter())
     doc.refs = {key: node for key, node in doc.refs.items() if node not in removed}
@@ -294,4 +361,161 @@ def patch_title(doc: Document, text: str):
     work = doc.child(doc.root, "work")
     if work is not None and doc.child(work, "work-title") is not None:
         put(doc, work, "work-title", text, ["work-number", "work-title", "opus"])
+    doc.changed = True
+
+
+def accidental_patch(doc, note, spelling):
+    pitch = doc.child(note, "pitch")
+    values = {"flat-flat": -2, "flat": -1, "natural": 0, "sharp": 1, "double-sharp": 2}
+    if pitch is None or rational(doc.text(pitch, "alter", "0")) != values[spelling]:
+        raise ReviewError("Written accidental must match the explicitly selected pitch alteration.")
+    put(doc, note, "accidental", spelling)
+
+
+def position_context(doc, measure_id):
+    """Resolve a constant-divisions XML cursor; never derive position from meter."""
+    info, _ = context(doc, measure_id=measure_id)
+    _, issues = import_score(doc)
+    if any(issue.severity == "ERROR" and issue.measure_id == measure_id for issue in issues):
+        raise ReviewError("Explicit placement cannot resolve a measure with technical representation errors. Correct those errors first.")
+    measure = doc.get(measure_id, "measure")
+    scale = rational(info.divisions)
+    if scale is None or scale <= 0:
+        raise ReviewError("Explicit insertion requires known positive divisions.")
+    cursor = Fraction(0)
+    seen_timing = False
+    for child in measure:
+        tag = local(child.tag)
+        if tag == "attributes":
+            if seen_timing:
+                raise ReviewError("Insertion around mid-measure context changes is ambiguous; use a notation editor.")
+        elif tag in ("note", "backup", "forward"):
+            seen_timing = True
+            if tag == "note" and (doc.child(child, "grace") is not None or doc.child(child, "chord") is not None):
+                continue
+            units = rational(doc.text(child, "duration"))
+            if units is None or units <= 0:
+                raise ReviewError("Insertion cannot resolve an invalid existing timeline.")
+            cursor += units / scale * (-1 if tag == "backup" else 1)
+            if cursor < 0:
+                raise ReviewError("Insertion cannot resolve a negative existing timeline.")
+    return info, cursor, scale
+
+
+def add_at_position(doc, identifier, request):
+    """Append an isolated, explicit stream or join one unique compatible chord.
+
+    Existing notes, backup/forward, directions and their onsets stay intact.
+    No capacity-based placement, spill into another measure, or generated rests.
+    """
+    if any((request.after_event_id, request.before_event_id, request.chord_with_id)):
+        raise ReviewError("Choose an explicit onset or an anchor, not both.")
+    onset = rational(request.onset)
+    if onset is None or not 0 <= onset <= 1024 or request.voice is None or request.staff is None:
+        raise ReviewError("Explicit insertion requires a nonnegative onset, explicit voice and staff.")
+    info, cursor, scale = position_context(doc, request.measure_id)
+    if request.staff > info.staves:
+        raise ReviewError("Staff exceeds the part's declared staff count.")
+    if any(e.onset is None or (not e.grace and e.duration is None) for v in info.voices for e in v.events):
+        raise ReviewError("Insertion cannot resolve ambiguous event timing.")
+    duration = rational(request.duration)
+    if duration is None or not 0 < duration <= 1024:
+        raise ReviewError("Duration must be positive quarter beats (maximum 1024).")
+    existing = [e for v in info.voices for e in v.events if e.voice == request.voice and not e.grace]
+    overlaps = [e for e in existing if not request.grace and onset < rational(e.onset) + rational(e.duration)
+                and rational(e.onset) < onset + duration]
+    if overlaps:
+        leaders = {e.chord_id or e.id for e in overlaps}
+        if (request.kind != "note" or len(leaders) != 1 or
+            any(e.kind != "note" or rational(e.onset) != onset for e in overlaps)):
+            raise ReviewError("This voice already occupies that position. Choose its exact chord rhythm or an explicit secondary voice.")
+        leader = next(iter(leaders))
+        members = group(doc, doc.get(leader, "note"))
+        preceding_duration = rational(doc.text(members[-1], "duration")) / scale
+        if duration <= preceding_duration:
+            add_event(doc, identifier, request.model_copy(update={"onset": None, "chord_with_id": leader}))
+            return
+        # Longer independent notes use an isolated cursor stream, retaining the chosen voice.
+    # Use existing note construction with no anchor, then bracket its duration.
+    add_event(doc, identifier, request.model_copy(update={"onset": None, "tie_to_event_id": None}))
+    measure = doc.get(request.measure_id, "measure")
+    note = doc.refs[identifier]
+    index = list(measure).index(note)
+    advance = Fraction(0) if request.grace else duration
+    def shift(delta, position):
+        if not delta:
+            return
+        units = abs(delta) * scale
+        if units.denominator != 1:
+            raise ReviewError("That position cannot be represented with this measure's divisions.")
+        node = ET.Element(doc.namespace + ("forward" if delta > 0 else "backup"))
+        ET.SubElement(node, doc.namespace + "duration").text = str(int(units))
+        measure.insert(position, node)
+    shift(cursor - onset - advance, index + 1)
+    shift(onset - cursor, index)
+    # Projection is the postcondition, not graphical placement.
+    doc.positioned_events.add(identifier)
+    _, added = context(doc, note)
+    if added.onset != str(onset) or added.voice != request.voice or added.staff != request.staff:
+        raise ReviewError("Insertion could not preserve the requested musical position.")
+    if request.tie_to_event_id:
+        from .ties import connect
+        connect(doc, identifier, request.tie_to_event_id)
+
+
+def move_event(doc, identifier, request):
+    """Explicit ownership correction preserving both timelines and opaque note data.
+
+    Relationship-bearing or context-dependent notation fails atomically rather
+    than guessing endpoint, instrument or tuplet ownership in another measure.
+    """
+    note = doc.get(identifier, "note")
+    source = doc.parent(note)
+    source_id = next(key for key, node in doc.refs.items() if node is source)
+    source_info, event = context(doc, note)
+    destination = doc.get(request.measure_id, "measure")
+    if doc.parent(source) is not doc.parent(destination):
+        raise ReviewError("Ownership correction is bounded to measures in the same part; use voice assignment for a secondary voice.")
+    if event.kind != "note" or event.grace or event.cue or event.onset is None or event.duration is None:
+        raise ReviewError("Ownership correction requires a duration-bearing pitched note with known timing.")
+    if (doc.children(note, "tie") or doc.child(note, "notations") is not None
+            or any(doc.child(note, tag) is not None for tag in ("beam", "time-modification", "instrument"))):
+        raise ReviewError("Remove ties or resolve context-dependent relationships before changing ownership.")
+    position_context(doc, source_id)
+    position_context(doc, request.measure_id)
+    members = group(doc, note)
+    leader = members[0] is note
+    index = list(source).index(note)
+    source.remove(note)
+    if leader and len(members) > 1:
+        remove(doc, members[1], "chord")
+        if identifier in doc.positioned_events:
+            doc.positioned_events.add(next(key for key, node in doc.refs.items() if node is members[1]))
+    elif leader:
+        compensation = ET.Element(doc.namespace + "forward")
+        ET.SubElement(compensation, doc.namespace + "duration").text = doc.text(note, "duration")
+        source.insert(index, compensation)
+    remove(doc, note, "chord")
+    # Reuse the explicit position planner and its collision/divisions guards.
+    pitch = PitchInput(step=event.pitch.step, alter=event.pitch.alter, octave=event.pitch.octave)
+    add_at_position(doc, identifier, EventAdd(measure_id=request.measure_id, onset=request.onset,
+                    voice=request.voice, staff=request.staff, kind="note", pitch=pitch,
+                    duration=event.duration, display_size=event.display_size))
+    generated = doc.refs[identifier]
+    target_info, placed = context(doc, generated)
+    duration_patch(doc, note, event.duration, target_info.divisions)
+    put(doc, note, "voice", request.voice)
+    put(doc, note, "staff", request.staff)
+    if doc.child(generated, "chord") is not None:
+        put(doc, note, "chord")
+    parent = doc.parent(generated)
+    index = list(parent).index(generated)
+    parent.remove(generated)
+    parent.insert(index, note)
+    doc.refs[identifier] = note
+    doc.positioned_events.discard(identifier)
+    if doc.child(note, "chord") is None:
+        doc.positioned_events.add(identifier)
+    doc.manual_changes[source_id] = sorted(set(doc.manual_changes.get(source_id, [])) | {"events"})
+    doc.manual_changes[request.measure_id] = sorted(set(doc.manual_changes.get(request.measure_id, [])) | {"events"})
     doc.changed = True

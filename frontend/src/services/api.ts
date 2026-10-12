@@ -1,6 +1,6 @@
 import type { HealthResponse } from '../types/health'
 import type { InputQuality, RecognitionProfile, RecognitionResponse, RecognitionResult } from '../types/recognition'
-import type { ReviewPayload, ReviewSession } from '../types/review'
+import type { MusicCheckResult, ReviewPayload, ReviewSession } from '../types/review'
 
 /**
  * All backend HTTP calls are centralized here. Pages/components must not
@@ -35,10 +35,10 @@ async function reviewResult(response: Response): Promise<ReviewSession> {
   return { ...payload, musicXml: decodeArtifact(xml, 'application/vnd.recordare.musicxml+xml') }
 }
 
-export async function createReview(musicXml: Blob, source: File, omr?: Blob | null, analysisOmr?: Blob | null): Promise<ReviewSession> {
+export async function createReview(musicXml: Blob, source?: File, omr?: Blob | null, analysisOmr?: Blob | null): Promise<ReviewSession> {
   const form = new FormData()
   form.append('musicxml', musicXml, 'recognized.musicxml')
-  form.append('source', source)
+  if (source) form.append('source', source)
   if (omr) form.append('omr', omr, 'recognized.omr')
   if (analysisOmr) form.append('analysis_omr', analysisOmr, 'semantic-evidence.omr')
   return reviewResult(await fetch(`${API_BASE_PATH}/reviews`, { method: 'POST', body: form }))
@@ -55,6 +55,14 @@ export async function changeReview(
     method, headers: { 'Content-Type': 'application/json', 'If-Match': `"${review.revision}"` },
     body: body === undefined ? undefined : JSON.stringify(body),
   }))
+}
+
+/** Optional read-only assistance: no correction response or lifecycle invalidation. */
+export async function checkReviewMusic(review: ReviewSession): Promise<MusicCheckResult> {
+  const response = await checkResponse(await fetch(`${API_BASE_PATH}/reviews/${encodeURIComponent(review.id)}/music-check`, {
+    method: 'POST', headers: { 'If-Match': `"${review.revision}"` },
+  }))
+  return response.json() as Promise<MusicCheckResult>
 }
 
 export async function closeReview(id: string): Promise<void> {

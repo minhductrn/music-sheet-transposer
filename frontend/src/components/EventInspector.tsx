@@ -47,7 +47,7 @@ export default function EventInspector({ event, measure, tieTargets = [], busy, 
   const validTiming = validDuration(duration)
   const invalidPatch = (pitchChanged && !validPitch) || (patch.duration !== undefined && !validTiming)
     || (patch.staff !== undefined && !validStaff) || (patch.voice !== undefined && !validVoice)
-  const invalidTie = Boolean(tieTarget && (grace || addKind !== 'note'))
+  const invalidTie = Boolean(tieTarget && addKind !== 'note')
   const invalidSequential = invalidTie || !validTiming || !validStaff || !validVoice || (addKind === 'note' && !validPitch)
 
   async function add(position: 'before' | 'after' | 'simultaneous') {
@@ -81,7 +81,7 @@ export default function EventInspector({ event, measure, tieTargets = [], busy, 
         <label>Display size <select value={size} onChange={(e) => setSize(e.target.value as DisplaySize)}>
           <option value="normal">Normal</option><option value="small">Small</option><option value="cue">Cue size</option>
         </select></label>
-        {event.kind === 'note' && !event.grace && <label>Tie to <select aria-label="Tie to" value={existingTie} onChange={(e) => setExistingTie(e.target.value)}>
+        {event.kind === 'note' && <label>Tie to <select aria-label="Tie to" value={existingTie} onChange={(e) => setExistingTie(e.target.value)}>
           <option value="">No tie</option>
           {initialExistingTie && !existingTargets.some((target) => target.id === initialExistingTie) && <option value={initialExistingTie}>Current target unavailable</option>}
           {existingTargets.map((target) => <option key={target.id} value={target.id}>{target.label}</option>)}
@@ -91,12 +91,12 @@ export default function EventInspector({ event, measure, tieTargets = [], busy, 
       <p className="review-hint">Small size keeps normal timing. Duration, voice and grace edits apply to the shared chord. Sequential add/delete shifts later events; backup/forward are retained, so check timing diagnostics.</p>
       {invalidPatch && <p role="alert">Enter valid pitch, positive duration, voice, and declared staff values for the fields being changed.</p>}
       <p className="review-hint">For the selected note, choose Tie to and Apply correction. No tie removes its outgoing tie without changing either note's duration.</p>
-      <p className="review-hint">To add a missing note, set its properties above and use Add before/after selected. The tie target must be the next matching pitched note in the same voice and staff, in this or the next measure. The server validates timing; the updated score previews automatically. Undo restores the prior score.</p>
+      <p className="review-hint">To add a missing note, set its properties above and use Add before/after selected. Choose the tie target explicitly. Technical integrity is checked; musical pitch/timing concerns are optional review warnings; the updated score previews automatically. Undo restores the prior score.</p>
       <label>Tie inserted note to <select aria-label="Tie inserted note to" value={tieTarget} onChange={(e) => setTieTarget(e.target.value)}>
         <option value="">No tie</option>
         {tieTargets.map((target) => <option key={target.id} value={target.id}>{target.label}</option>)}
       </select></label>
-      {invalidTie && <p role="alert">A tied insertion must be a duration-bearing note. Turn off grace timing and choose Note.</p>}
+      {invalidTie && <p role="alert">A tie endpoint must be a pitched note. Choose Note instead of Rest.</p>}
       <div className="review-toolbar">
         <button type="button" disabled={Object.keys(patch).length === 0 || invalidPatch} onClick={() => void change(`events/${event.id}`, 'PATCH', patch)}>Apply correction</button>
         <label>Add <select value={addKind} onChange={(e) => setAddKind(e.target.value as 'note' | 'rest')}><option value="note">Note</option><option value="rest">Rest</option></select></label>

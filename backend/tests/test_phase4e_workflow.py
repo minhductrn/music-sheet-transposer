@@ -80,13 +80,6 @@ def evidence(small=True):
     return data.getvalue()
 
 
-def resolve(client, review, disposition="ACCEPTED", note="Compared this notation with the original source."):
-    issue = next(i for i in review["review_issues"] if i["status"] == "REVIEW_REQUIRED")
-    response = request(client, review, "issues/resolve", {"issue_id": issue["id"], "disposition": disposition, "note": note})
-    assert response.status_code == 200, response.text
-    return response.json()
-
-
 @pytest.mark.parametrize("semitones", [0, 2, -2])
 def test_mixed_size_patch_verified_handoff_and_exports(workflow, monkeypatch, semitones):
     client, _ = workflow
@@ -169,67 +162,48 @@ def test_multiple_undo_restores_xml_and_manual_provenance(workflow):
     assert xml(redone) == xml(first) and event(redone) == event(first)
 
 
-def test_issue_resolution_verification_undo_and_provenance(workflow):
-    client, _ = workflow
+def test_omr_ambiguity_allows_explicit_confirmation_and_export(workflow):
+    client, service = workflow
     baseline = (FIXTURES / "semantic_baseline.musicxml").read_bytes()
     review = create(client, baseline, evidence(False))
-    issue = review["review_issues"][0]
-    assert issue["status"] == "REVIEW_REQUIRED"
-    assert not review["validation"]["can_verify"]
-    assert request(client, review, "verify", {"confirmed_source_comparison": True}).status_code == 409
-    assert request(client, review, "issues/resolve", {"issue_id": issue["id"], "disposition": "MANUALLY_CORRECTED", "note": "Checked"}).status_code == 409
-    corrected = patch(client, review, event_id=issue["event_id"] or issue["anchor_id"], display_size="small")
-    handled = resolve(client, corrected, "MANUALLY_CORRECTED")
-    assert handled["review_issues"][0]["status"] == "MANUALLY_CORRECTED"
-    assert handled["semantic_recovery"] == review["semantic_recovery"]
-    verified = verify(client, handled)
-    same_issue = handled["review_issues"][0]
-    assert request(client, verified, "issues/resolve", {"issue_id": same_issue["id"], "disposition": "ACCEPTED", "note": "Checked"}).status_code == 409
-    changed = patch(client, verified, event_id=issue["event_id"] or issue["anchor_id"], display_size="normal")
-    assert changed["state"] == "REVIEW_REQUIRED"
-    assert changed["review_issues"][0]["status"] == "REVIEW_REQUIRED"
+    assert review["semantic_recovery"]["review_required"]
+    assert "review_issues" not in review
+    assert review["validation"]["can_verify"]
+    assert review["state"] != "VERIFIED"
+    assert request(client, review, "verify", {"confirmed_source_comparison": False}).status_code == 422
+    assert client.get(f'/api/v1/reviews/{review["id"]}/musicxml?verified_only=true').status_code == 409
+    verified = verify(client, review)
+    exported = client.get(f'/api/v1/reviews/{verified["id"]}/musicxml?verified_only=true')
+    assert exported.status_code == 200 and exported.content == baseline
+    assert client.get(f'/api/v1/reviews/{verified["id"]}').json()["semantic_recovery"] == review["semantic_recovery"]
+    imported = create(client, exported.content)
+    assert xml(imported) == baseline and imported["state"] != "VERIFIED"
+    candidate = review["semantic_recovery"]["candidates"][0]
+    changed = patch(client, verified, event_id=candidate["event_id"] or candidate["anchor_id"], display_size="small")
+    assert changed["state"] != "VERIFIED"
     assert request(client, changed, "transpose", {"semitones": 2}).status_code == 409
     reverted = request(client, changed, "undo").json()
-    assert reverted["review_issues"][0]["status"] == "MANUALLY_CORRECTED"
-    assert reverted["state"] == "REVIEW_REQUIRED"
-    resolution_undone = request(client, reverted, "undo").json()
-    assert resolution_undone["review_issues"][0]["status"] == "REVIEW_REQUIRED"
+    assert xml(reverted) == baseline and reverted["state"] != "VERIFIED"
+    assert verify(client, reverted)["state"] == "VERIFIED"
 
 
-def test_explicit_acceptance_and_geometry_retains_evidence(workflow):
-    client, _ = workflow
-    review = create(client, (FIXTURES / "semantic_baseline.musicxml").read_bytes(), evidence(False))
-    issue = review["review_issues"][0]
-    assert issue["source_location"]["width"] == 500 and issue["source_location"]["height"] == 300
-    assert issue["source_location"]["bounds"] == issue["evidence"]["bounds"]
-    handled = resolve(client, review)
-    assert xml(handled) == xml(review)
-    assert handled["review_issues"][0]["status"] == "ACCEPTED"
-    assert handled["review_issues"][0]["handling"]["note"]
-    assert verify(client, handled)["state"] == "VERIFIED"
-
-
-def test_auto_recovery_undo_reopens_issue_and_preserves_origin(workflow):
+def test_auto_recovery_history_retains_evidence_without_issue_gate(workflow):
     client, _ = workflow
     review = create(client, (FIXTURES / "semantic_baseline.musicxml").read_bytes(), evidence())
-    assert review["review_issues"][0]["status"] == "AUTO_RECOVERED"
     recovered = event(review, "recovery-1")
     assert recovered["provenance"]["origin"] == "semantic_recovery"
     assert recovered["provenance"]["evidence_ids"]
     pitched = patch(client, review, event_id="recovery-1", pitch={"step": "D", "octave": 5})
     assert event(pitched, "recovery-1")["provenance"]["evidence_ids"] == recovered["provenance"]["evidence_ids"]
-    review = request(client, pitched, "undo").json()
-    corrected = patch(client, review, event_id="recovery-1", display_size="normal")
-    assert event(corrected, "recovery-1")["provenance"]["origin"] == "semantic_recovery"
-    assert corrected["review_issues"][0]["status"] == "REVIEW_REQUIRED"
-    undone_edit = request(client, corrected, "undo").json()
-    assert undone_edit["review_issues"][0]["status"] == "AUTO_RECOVERED"
+    undone_edit = request(client, pitched, "undo").json()
+    assert xml(undone_edit) == xml(review)
     undone_recovery = request(client, undone_edit, "undo").json()
-    assert undone_recovery["review_issues"][0]["status"] == "REVIEW_REQUIRED"
-    assert not undone_recovery["validation"]["can_verify"]
+    assert xml(undone_recovery) == (FIXTURES / "semantic_baseline.musicxml").read_bytes()
+    assert undone_recovery["validation"]["can_verify"]
+    assert undone_recovery["semantic_recovery"] == review["semantic_recovery"]
 
 
-def test_overlap_blocks_verification_without_omr_and_edit_is_undoable(workflow):
+def test_overlap_is_advisory_without_omr_and_edit_is_undoable(workflow):
     client, _ = workflow
     review = create(client)
     # Longer voice-2 note crosses its retained forward into the following rest.
@@ -238,7 +212,8 @@ def test_overlap_blocks_verification_without_omr_and_edit_is_undoable(workflow):
     # Switching voice 2 to voice 1 makes its inherited backup timeline overlap voice 1.
     overlap = patch(client, corrected, event_id="e-4", voice="1")
     assert any(i["code"] == "voice_overlap" for i in overlap["validation"]["diagnostics"])
-    assert request(client, overlap, "verify", {"confirmed_source_comparison": True}).status_code == 409
+    assert overlap["validation"]["can_verify"]
+    assert all(not i["blocking"] for i in overlap["validation"]["diagnostics"] if i["code"] == "voice_overlap")
     undone = request(client, overlap, "undo").json()
     assert xml(undone) == xml(corrected)
 
@@ -268,12 +243,10 @@ def test_transposition_failure_does_not_mutate_verified_review(workflow):
     assert service.get(verified["id"]) == verified
 
 
-@pytest.mark.parametrize("fields", [{"issue_id": "missing", "disposition": "ACCEPTED", "note": " "},
-                                       {"issue_id": "missing", "disposition": "OTHER", "note": "Checked"}])
-def test_invalid_issue_handling_is_rejected(workflow, fields):
+def test_removed_issue_resolution_endpoint_is_unavailable(workflow):
     client, _ = workflow
     review = create(client)
-    assert request(client, review, "issues/resolve", fields).status_code == 422
+    assert request(client, review, "issues/resolve", {"issue_id": "obsolete"}).status_code == 404
 
 
 @pytest.mark.parametrize("lower,upper", [("A", "C"), ("F", "A")])
@@ -295,6 +268,7 @@ def test_two_benchmark_style_pairs_using_synthetic_score(workflow, lower, upper)
     verified = verify(client, corrected)
     result = request(client, verified, "transpose", {"semitones": 0})
     assert result.status_code == 200 and result.content == xml(corrected)
+
 
 
 def test_duration_patch_checks_chord_and_keeps_backup_forward(workflow):

@@ -24,10 +24,11 @@ class Document:
     original: bytes
     changed: bool = False
     # Snapshot sidecars travel with XML/identities through the existing undo stack.
-    issue_handlings: dict[str, dict] = field(default_factory=dict)
     manual_changes: dict[str, list[str]] = field(default_factory=dict)
     manual_ties: dict[str, dict] = field(default_factory=dict)
     candidate_events: dict[str, str] = field(default_factory=dict)
+    positioned_events: set[str] = field(default_factory=set)
+    source_confirmations: dict[str, dict] = field(default_factory=dict)
 
     @classmethod
     def parse(cls, contents: bytes, max_nodes: int = 100_000):
@@ -68,7 +69,10 @@ class Document:
             if prefix:
                 counts[prefix] = counts.get(prefix, 0) + 1
                 refs[f"{prefix}-{counts[prefix]}"] = element
-        return cls(root, refs, contents)
+        document = cls(root, refs, contents)
+        from .ties import restore_explicit_relationships
+        restore_explicit_relationships(document)
+        return document
 
     @property
     def namespace(self) -> str:
@@ -103,4 +107,4 @@ class Document:
 
     def weight(self) -> int:
         # Conservative accounting includes the original bytes and tree/sidecar overhead.
-        return len(self.original) + len(self.xml()) + sum(512 for _ in self.root.iter()) + len(json.dumps([self.issue_handlings, self.manual_changes, self.candidate_events, self.manual_ties]).encode()) * 2
+        return len(self.original) + len(self.xml()) + sum(512 for _ in self.root.iter()) + len(json.dumps([self.manual_changes, self.candidate_events, self.manual_ties, self.source_confirmations, sorted(self.positioned_events)]).encode()) * 2

@@ -48,24 +48,44 @@ class ReviewService:
                                    and document.text(document.child(node, "pitch"), "alter", "0") == pitch["alter"]]
                         if len(matches) == 1:
                             document.candidate_events[candidate["id"]] = matches[0]
-                    document.issue_handlings[candidate["id"]] = {
-                        "status": "AUTO_RECOVERED", "note": "Corroborated recovery at import.", "revision": 1,
-                    }
+        # Evidence retention is independent of recovery enablement and never mutates notes.
+        source_evidence = []
+        from app.music.recovery.omr import parse_omr
+        from app.music.recognition.errors import RecognitionError
+        for contents in (omr, analysis_omr):
+            if contents is None:
+                continue
+            try:
+                observed = parse_omr(contents, max_bytes=self.config.recognition_max_artifact_bytes,
+                                     max_expanded_bytes=self.config.semantic_max_expanded_bytes,
+                                     max_members=self.config.recognition_max_archive_members,
+                                     max_nodes=self.config.semantic_max_xml_nodes)
+                if not any(e['sha256'] == observed.sha256 for e in source_evidence):
+                    source_evidence.append(asdict(observed))
+            except RecognitionError:
+                # Existing recovery reports parse failures; no fabricated evidence.
+                pass
         retained = prepare_source(source, source_mime or "", self.config) if source is not None else None
         session = ReviewSession(secrets.token_urlsafe(24), document, retained,
                                 self.clock() + self.config.review_lifetime_seconds,
                                 state="REVIEW_REQUIRED" if recovery_report and (recovery_report["review_required"] or recovery_report["auto_recovered"]) else "DRAFT",
                                 undo=self._history([baseline]) if recovery_report and recovery_report["auto_recovered"] else [],
-                                semantic_recovery=recovery_report)
+                                semantic_recovery=recovery_report, source_evidence=source_evidence)
         with self.store.lock:
+            score, _ = self._projection(session)
+            if any(m.conflict_state == "CONFLICT" for p in score.parts for m in p.measures):
+                session.state = "REVIEW_REQUIRED"
             self.store.put(session)
             return self.payload(session)
 
     def payload(self, session):
         score, issues = self._projection(session)
-        errors = sum(i.severity == "ERROR" for i in issues)
-        review_issues = self.review_issues(session)
-        unresolved = sum(i["status"] == "REVIEW_REQUIRED" for i in review_issues)
+        from .confirmations import diagnostics
+        diagnosed = diagnostics(session.document, issues)
+        errors = sum(i["blocking"] for i in diagnosed)
+        evidence_candidates = (session.semantic_recovery or {}).get("candidates", [])
+        from .structure import source_layout
+        source_layout(score, session.source_evidence)
         projected = asdict(score)
         from .ties import tie_info
         relationships = tie_info(session.document, score)
@@ -74,21 +94,39 @@ class ReviewService:
                 for voice in measure["voices"]:
                     for event in voice["events"]:
                         event.update(relationships[event["id"]])
+                        # Discover standard picker values with the existing patcher;
+                        # tuplets/chord members can further restrict representability.
+                        from .patcher import duration_patch
+                        members = group(session.document, session.document.refs[event["id"]])
+                        options = []
+                        if not event["grace"]:
+                            for value in ("1/4", "1/2", "1", "3/2", "2", "3", "4"):
+                                try:
+                                    for member in members:
+                                        duration_patch(session.document, deepcopy(member), value, event["divisions"])
+                                except ReviewError:
+                                    continue
+                                options.append(value)
+                        event["duration_options"] = options
                         event["provenance"] = {
                             "origin": "semantic_recovery" if event["id"].startswith("recovery-") else
                                       "manual_addition" if event["id"].startswith("new-") else
                                       "audiveris_baseline" if session.semantic_recovery else "musicxml_import",
                             "manual_fields": session.document.manual_changes.get(event["id"], []),
-                            "evidence_ids": [i["id"] for i in review_issues if event["id"] in (i["event_id"], i["anchor_id"])],
+                            "layer": "USER_CORRECTION" if session.document.manual_changes.get(event["id"]) or event["id"].startswith("new-") else "RECOGNITION_INTERPRETATION",
+                            "evidence_ids": [i["id"] for i in evidence_candidates if event["id"] in (session.document.candidate_events.get(i["id"], i.get("event_id")), i.get("anchor_id"))],
                         }
         return {"id": session.id, "revision": session.revision, "state": session.state,
                 "expires_at": session.expires_at, "score": projected,
-                "validation": {"can_verify": not errors and not unresolved, "unresolved_issue_count": unresolved, "error_count": errors,
+                "validation": {"can_verify": not errors, "error_count": errors,
                                "warning_count": sum(i.severity == "WARNING" for i in issues),
-                               "diagnostics": [asdict(i) for i in issues[:500]], "truncated": len(issues) > 500},
+                               "diagnostics": diagnosed[:500], "truncated": len(issues) > 500},
                 "can_undo": bool(session.undo), "can_redo": bool(session.redo),
+                "source_confirmations": [{**decision, "diagnostic_id": key,
+                    "status": "CURRENT" if any(i["id"] == key and i["source_confirmed"] for i in diagnosed) else "STALE"}
+                    for key, decision in session.document.source_confirmations.items()],
+                "source_evidence": session.source_evidence,
                 "semantic_recovery": session.semantic_recovery,
-                "review_issues": review_issues,
                 "source": {"media_type": session.source.media_type, "pages": session.source.pages} if session.source else None,
                 "musicxml_base64": b64encode(session.document.xml()).decode("ascii")}
 
@@ -98,57 +136,29 @@ class ReviewService:
         score, issues = context.score, list(context.diagnostics)
         for mid, validation in rhythm(context).items():
             for issue in validation["diagnostics"]:
-                if issue["code"] in ("voice_overlap", "voice_underfilled") or ((session.semantic_recovery is not None or "events" in session.document.manual_changes.get(mid, [])) and issue["code"] == "measure_overfilled"):
+                if issue["code"] in ("voice_overlap", "voice_underfilled", "measure_overfilled"):
                     issues.append(Diagnostic(issue["code"], issue["code"].replace("_", " ").capitalize() + "; compare with the source.",
                                              issue["severity"], mid, issue["event_id"]))
         from .ties import diagnostics as tie_diagnostics
         issues.extend(tie_diagnostics(session.document))
+        from .music_check import classify
+        issues = classify(issues)
         for part in score.parts:
             for measure in part.measures:
                 severities = {i.severity for i in issues if i.measure_id == measure.id}
                 measure.validation_state = "ERROR" if "ERROR" in severities else "WARNING" if "WARNING" in severities else "VALID"
+                if "ERROR" in severities:
+                    measure.conflict_state = "CONFLICT"
+                    if measure.rhythm_status == "VALID":
+                        measure.rhythm_status = "STRUCTURALLY_AMBIGUOUS"
         return score, issues
 
-    def review_issues(self, session):
-        # Evidence is immutable import provenance; handling lives in undoable sidecars.
-        result = []
-        for candidate in (session.semantic_recovery or {}).get("candidates", []):
-            if candidate["state"] == "NO_RECOVERY":
-                continue
-            handling = session.document.issue_handlings.get(candidate["id"], {})
-            issue = deepcopy(candidate)
-            # Bind once at import, so later pitch/size edits retain evidence identity.
-            if candidate["id"] in session.document.candidate_events:
-                issue["event_id"] = session.document.candidate_events[candidate["id"]]
-            related = [issue.get("event_id"), issue.get("anchor_id"), issue.get("measure_id")]
-            evidence = candidate["evidence"]
-            archive_hash = evidence["provenance"].split("/")[0]
-            sheets = [sheet for archive in (session.semantic_recovery or {}).get("evidence", [])
-                      if archive["sha256"] == archive_hash for sheet in archive.get("sheets", [])
-                      if sheet["number"] == evidence["sheet"]]
-            issue["source_location"] = {"page": evidence["sheet"], "bounds": evidence.get("bounds"),
-                                        "width": sheets[0]["width"] if sheets else None,
-                                        "height": sheets[0]["height"] if sheets else None}
-            issue.update(status=handling.get("status", "REVIEW_REQUIRED"), handling=deepcopy(handling),
-                         can_mark_corrected=any(session.document.manual_changes.get(eid) for eid in related))
-            result.append(issue)
-        return result
-
-    def resolve_issue(self, identifier, revision, request):
+    def confirm_source(self, identifier, revision, request):
         with self.store.lock:
             session = self._session(identifier, revision)
-            issue = next((i for i in self.review_issues(session) if i["id"] == request.issue_id), None)
-            if issue is None:
-                raise ReviewError("The review issue does not exist.", 404)
-            if issue["status"] != "REVIEW_REQUIRED":
-                raise ReviewError("This issue is already handled. Reload the review.", 409)
-            if request.disposition == "MANUALLY_CORRECTED" and not issue["can_mark_corrected"]:
-                raise ReviewError("Apply a related correction first, or accept the notation after source comparison.", 409)
-            def operation(doc, _):
-                doc.issue_handlings[request.issue_id] = {
-                    "status": request.disposition, "note": request.note.strip(), "revision": revision + 1,
-                }
-            return self.edit(identifier, revision, operation)
+            _, issues = self._projection(session)
+            from .confirmations import confirm
+            return self.edit(identifier, revision, lambda doc, _: confirm(doc, issues, request, revision + 1))
 
     def get(self, identifier):
         with self.store.lock:
@@ -171,19 +181,15 @@ class ReviewService:
             session = self._session(identifier, revision)
             candidate = session.document.clone()
             sequence = session.sequence + 1
-            operation(candidate, f"new-{sequence}")
+            if operation(candidate, f"new-{sequence}") is False:
+                return self.payload(session)
             if len(candidate.xml()) > self.config.recognition_max_output_bytes or sum(1 for _ in candidate.root.iter()) > self.config.review_max_xml_nodes:
                 raise ReviewError("The correction exceeds the score size limit.", 413)
-            changed_ids = {eid for eid in candidate.refs.keys() | session.document.refs.keys()
-                           if eid not in candidate.refs or eid not in session.document.refs
-                           or ET.tostring(candidate.refs[eid]) != ET.tostring(session.document.refs[eid])}
-            for issue in self.review_issues(session):
-                if changed_ids.intersection((issue.get("event_id"), issue.get("anchor_id"), issue.get("measure_id"))):
-                    previous = candidate.issue_handlings.get(issue["id"])
-                    if previous:
-                        candidate.issue_handlings[issue["id"]] = {
-                            **previous, "status": "REVIEW_REQUIRED", "invalidated_revision": revision + 1,
-                        }
+            from .confirmations import fingerprint
+            for key, decision in candidate.source_confirmations.items():
+                if key in session.document.source_confirmations and decision == session.document.source_confirmations[key]:
+                    if decision["fingerprint"] != fingerprint(candidate, decision["measure_id"]):
+                        decision["invalidated_revision"] = revision + 1
             updated = replace(session, document=candidate, state="REVIEW_REQUIRED", revision=session.revision + 1,
                               sequence=sequence, undo=self._history(session.undo + [session.document]), redo=[])
             # Validate/encode before commit. Musical errors remain editable and undoable.
@@ -194,12 +200,24 @@ class ReviewService:
     def event_patch(self, identifier, revision, event_id, patch: EventPatch):
         def operation(doc, _):
             members = group(doc, doc.get(event_id, "note"))
-            patch_event(doc, event_id, patch)
+            if patch_event(doc, event_id, patch) is False:
+                return False
             shared = patch.model_fields_set.intersection({"duration", "voice", "grace"})
+            if patch.model_fields_set.intersection({"duration", "grace"}):
+                measure = doc.parent(doc.get(event_id, "note"))
+                mid = next(key for key, node in doc.refs.items() if node is measure)
+                doc.manual_changes[mid] = sorted(set(doc.manual_changes.get(mid, [])) | {"events"})
             for key, node in doc.refs.items():
                 if node in members and shared:
                     doc.manual_changes[key] = sorted(set(doc.manual_changes.get(key, [])) | shared)
-            doc.manual_changes[event_id] = sorted(set(doc.manual_changes.get(event_id, [])) | patch.model_fields_set)
+            doc.manual_changes[event_id] = sorted(set(doc.manual_changes.get(event_id, [])) | (patch.model_fields_set - {"preserve_onsets"}))
+        return self.edit(identifier, revision, operation)
+
+    def event_move(self, identifier, revision, event_id, request):
+        def operation(doc, _):
+            from .patcher import move_event
+            move_event(doc, event_id, request)
+            doc.manual_changes[event_id] = sorted(set(doc.manual_changes.get(event_id, [])) | {"ownership", "voice", "staff", "onset"})
         return self.edit(identifier, revision, operation)
 
     def event_add(self, identifier, revision, request: EventAdd):
@@ -220,7 +238,24 @@ class ReviewService:
         return self.edit(identifier, revision, operation)
 
     def lyric_patch(self, identifier, revision, lyric_id, request: TextPatch):
-        return self.edit(identifier, revision, lambda doc, _: patch_lyric(doc, lyric_id, request.text, request.segment_index))
+        def operation(doc, _):
+            lyric = doc.get(lyric_id, "lyric")
+            note = doc.parent(lyric)
+            event_id = next(key for key, node in doc.refs.items() if node is note)
+            patch_lyric(doc, lyric_id, request.text, request.segment_index)
+            doc.manual_changes[event_id] = sorted(set(doc.manual_changes.get(event_id, [])) | {"lyrics"})
+        return self.edit(identifier, revision, operation)
+
+    def lyric_delete(self, identifier, revision, lyric_id):
+        def operation(doc, _):
+            lyric = doc.get(lyric_id, "lyric")
+            note = doc.parent(lyric)
+            event_id = next(key for key, node in doc.refs.items() if node is note)
+            note.remove(lyric)
+            del doc.refs[lyric_id]
+            doc.manual_changes[event_id] = sorted(set(doc.manual_changes.get(event_id, [])) | {"lyrics"})
+            doc.changed = True
+        return self.edit(identifier, revision, operation)
 
     def lyric_add(self, identifier, revision, event_id, request: LyricAdd):
         def operation(doc, new_id):
@@ -233,6 +268,7 @@ class ReviewService:
             index = next((i for i, child in enumerate(note) if child.tag in (doc.namespace + "play", doc.namespace + "listen")), len(note))
             note.insert(index, lyric)
             doc.refs[new_id] = lyric
+            doc.manual_changes[event_id] = sorted(set(doc.manual_changes.get(event_id, [])) | {"lyrics"})
             doc.changed = True
         return self.edit(identifier, revision, operation)
 
@@ -265,6 +301,18 @@ class ReviewService:
             doc.changed = True
         return self.edit(identifier, revision, operation)
 
+    def music_check(self, identifier, revision):
+        """Explicit assistance; no state/revision/history/verification mutation."""
+        with self.store.lock:
+            session = self._session(identifier, revision)
+            _, issues = self._projection(session)
+            from .confirmations import diagnostics
+            result = diagnostics(session.document, issues)
+            return {"revision": session.revision, "diagnostics": result[:500],
+                    "warning_count": sum(i["category"] == "MUSIC_WARNING" for i in result),
+                    "technical_error_count": sum(i["blocking"] for i in result),
+                    "truncated": len(result) > 500}
+
     def validate(self, identifier, revision):
         with self.store.lock:
             session = self._session(identifier, revision)
@@ -277,10 +325,9 @@ class ReviewService:
         with self.store.lock:
             session = self._session(identifier, revision)
             _, issues = self._projection(session)
-            if any(issue.severity == "ERROR" for issue in issues):
-                raise ReviewError("Correct all validation errors before marking this review VERIFIED.", 409)
-            if any(i["status"] == "REVIEW_REQUIRED" for i in self.review_issues(session)):
-                raise ReviewError("Handle each review issue by correction or explicit source comparison before verification.", 409)
+            from .confirmations import diagnostics
+            if any(issue["blocking"] for issue in diagnostics(session.document, issues)):
+                raise ReviewError("Correct technical representation errors before marking this review VERIFIED. Optional music warnings do not block source confirmation.", 409)
             updated = replace(session, state="VERIFIED", revision=session.revision + 1)
             self.store.put(updated)
             return self.payload(updated)
