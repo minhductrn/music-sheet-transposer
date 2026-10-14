@@ -1,3 +1,5 @@
+from typing import Annotated, Literal
+
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
@@ -6,6 +8,7 @@ from app.music.musicxml.transposer import (
     MusicXMLTranspositionError,
     transpose_musicxml_document,
 )
+from app.music.musicxml.concert_key import concert_key_info, transpose_concert_key
 from app.music.transposition.score_transposer import transpose_score
 from app.schemas.transposition import (
     TransposeRequest,
@@ -14,6 +17,36 @@ from app.schemas.transposition import (
 
 
 router = APIRouter()
+
+
+@router.post("/concert-key")
+async def inspect_concert_key(file: UploadFile = File(...)) -> dict:
+    try:
+        return await run_in_threadpool(concert_key_info, await file.read())
+    except MusicXMLTranspositionError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.post("/transpose/concert-key")
+async def transpose_concert_musicxml(
+    source_fifths: Annotated[int, Form(ge=-7, le=7)],
+    source_mode: Annotated[Literal["major", "minor"], Form()],
+    source_confirmed: Annotated[bool, Form()],
+    file: UploadFile = File(...),
+    target_fifths: Annotated[int, Form(ge=-7, le=7)] = 0,
+    direction: Annotated[Literal["up", "down"], Form()] = "up",
+) -> Response:
+    if not source_confirmed:
+        raise HTTPException(status_code=422, detail="Confirm the Source Key before transposing.")
+    try:
+        contents = await run_in_threadpool(
+            transpose_concert_key, await file.read(), target_fifths, direction,
+            source_fifths=source_fifths, source_mode=source_mode,
+        )
+    except MusicXMLTranspositionError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return Response(contents, media_type="application/vnd.recordare.musicxml+xml",
+                    headers={"Content-Disposition": 'attachment; filename="concert-transposed.musicxml"'})
 
 
 @router.post(

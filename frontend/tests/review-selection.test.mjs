@@ -6,7 +6,7 @@ import test from 'node:test'
 import vm from 'node:vm'
 import ts from 'typescript'
 
-function componentHarness(initialReview, auxiliaryOwner = () => null) {
+function componentHarness(initialReview, auxiliaryOwner = () => null, resultOnly = false) {
   const states = []
   let slot = 0
   let review = initialReview
@@ -48,7 +48,7 @@ function componentHarness(initialReview, auxiliaryOwner = () => null) {
   })
   // These regressions exercise an explicitly selected event, not an implicit default.
   slot = 0
-  const initial = module.exports.default({ review, onChange() {}, onBusy() {}, download() {} })
+  const initial = module.exports.default({ review, resultOnly, onChange() {}, onBusy() {}, download() {} })
   const first = review.score.parts.flatMap((p) => p.measures.flatMap((m) => m.voices.flatMap((v) => v.events)))[0]
   if (first) element(initial, (e) => e.type === './MusicSheetViewer').props.onSelect(first.id)
   return {
@@ -56,7 +56,7 @@ function componentHarness(initialReview, auxiliaryOwner = () => null) {
     setResponse(value) { response = value },
     render() {
       slot = 0
-      return module.exports.default({ review, onChange: (value) => { review = value }, onBusy() {}, download() {} })
+      return module.exports.default({ review, resultOnly, onChange: (value) => { review = value }, onBusy() {}, download() {} })
     },
   }
 }
@@ -64,7 +64,7 @@ function componentHarness(initialReview, auxiliaryOwner = () => null) {
 function element(tree, predicate) {
   if (!tree || typeof tree !== 'object') return null
   if (predicate(tree)) return tree
-  const children = tree.props?.children
+  const children = [tree.props?.children, tree.props?.headerActions, tree.props?.toolbar, tree.props?.context, tree.props?.moreControls]
   for (const child of Array.isArray(children) ? children.flat(Infinity) : [children]) {
     const found = element(child, predicate)
     if (found) return found
@@ -85,12 +85,36 @@ function review(revision, restored = false) {
   }
 }
 
+test('Review and Transpose expose additional operations through More without an Advanced editing disclosure', () => {
+  for (const resultOnly of [false, true]) {
+    const view = componentHarness(review(1), () => null, resultOnly)
+    const toolbar = () => element(view.render(), e => e.type === './ScoreCorrectionToolbar')
+    assert.equal(toolbar().props.group, 'select')
+    assert.equal(toolbar().props.context.type, 'div')
+    assert.equal(toolbar().props.context.props.hidden, true)
+    for (const group of ['note', 'lyrics', 'tie', 'more']) {
+      toolbar().props.onGroup(group)
+      const context = toolbar().props.context
+      assert.equal(context.props.hidden, group !== 'more')
+      assert.equal(element(context, e => e.type === 'summary' && e.props.children === 'Advanced editing'), null)
+      assert.ok(element(context, e => e.props?.['aria-label'] === 'Advanced correction'))
+    }
+    const context = toolbar().props.context
+    assert.ok(element(context, e => e.props?.['aria-label'] === 'Correction measure'))
+    const inspector = element(context, e => e.props?.['aria-label'] === 'Advanced correction')
+    assert.equal(inspector.props.hidden, false)
+    assert.ok(element(inspector, e => e.type === './EventInspector'))
+    element(context, e => e.type === 'button' && e.props.children === 'Add at musical position').props.onClick()
+    assert.ok(element(toolbar().props.context, e => e.type === './MusicalPositionEditor'))
+  }
+})
+
 for (const direction of ['undo', 'redo']) {
   test(`${direction} selects a restored event together with its measure and voice`, async () => {
     const harness = componentHarness(review(3))
     const tree = harness.render()
     harness.setResponse(review(4, true))
-    const button = element(tree, (e) => e.type === 'button' && e.props.children === (direction === 'undo' ? 'Undo' : 'Redo'))
+    const button = element(tree, (e) => e.type === 'button' && e.props['aria-label'] === (direction === 'undo' ? 'Undo' : 'Redo'))
     button.props.onClick()
     await new Promise(setImmediate)
     const refreshed = harness.render()
@@ -99,7 +123,7 @@ for (const direction of ['undo', 'redo']) {
     assert.equal(inspector.props.measure.id, 'm-2')
     assert.equal(inspector.props.event.voice, '2')
     assert.equal(harness.requests[0].revision, 3)
-    const nextButton = element(refreshed, (e) => e.type === 'button' && e.props.children === 'Undo')
+    const nextButton = element(refreshed, (e) => e.type === 'button' && e.props['aria-label'] === 'Undo')
     harness.setResponse(review(5, true))
     nextButton.props.onClick()
     await new Promise(setImmediate)
@@ -135,7 +159,7 @@ for (const direction of ['undo', 'redo']) {
     const before = harness.render()
     const first = element(before, (e) => e.type === './EventInspector')
     harness.setResponse(tiedReview(3, direction === 'redo'))
-    element(before, (e) => e.type === 'button' && e.props.children === (direction === 'undo' ? 'Undo' : 'Redo')).props.onClick()
+    element(before, (e) => e.type === 'button' && e.props['aria-label'] === (direction === 'undo' ? 'Undo' : 'Redo')).props.onClick()
     await new Promise(setImmediate)
     const next = element(harness.render(), (e) => e.type === './EventInspector')
     assert.equal(next.props.event.tie_target_id, direction === 'redo' ? 'target' : null)

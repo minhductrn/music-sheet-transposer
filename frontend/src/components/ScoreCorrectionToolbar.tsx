@@ -1,14 +1,17 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { Measure, Pitch, ReviewSession, ScoreEvent } from '../types/review'
 import type { VisualInsertionPosition } from '../utils/scoreInsertion'
 import { durationChoices, movePitch } from '../utils/visualReview'
 import { LyricEditor } from './VisualNoteEditor'
 
 type Change = (path: string, method: 'POST' | 'PATCH' | 'DELETE', body?: unknown) => Promise<void>
+export type EditorTool = 'select' | 'note' | 'lyrics' | 'tie' | 'more'
 interface Props {
+  group?: EditorTool; onGroup?: (group: EditorTool) => void; context?: ReactNode
   review: ReviewSession; event?: ScoreEvent; measure?: Measure; position: VisualInsertionPosition | null
   adding: boolean; tying: boolean; disabled: boolean; readOnly: boolean
   anchorPosition: () => void; change: Change; select: () => void; add: () => void; tie: () => void; advanced: () => void
+  tieTargets?: { id: string; label: string }[]
   lyricOwner?: ScoreEvent | null; selectLyricOwner?: () => void
 }
 const paths: Record<string, string> = {
@@ -23,8 +26,8 @@ export function CorrectionIcon({ name }: { name: string }) {
   return <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path d={paths[name]} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>
 }
 
-export default function ScoreCorrectionToolbar({ review, event, measure, position, adding, tying, disabled, readOnly, anchorPosition, change, select, add, tie, advanced, lyricOwner, selectLyricOwner }: Props) {
-  const [tool, setTool] = useState('')
+export default function ScoreCorrectionToolbar({ review, event, measure, position, adding, tying, disabled, readOnly, anchorPosition, change, select, add, tie, lyricOwner, selectLyricOwner, group = 'select', onGroup, context, tieTargets = [] }: Props) {
+  const [tool, setTool] = useState(group === 'lyrics' ? 'lyric' : '')
   const selected = event?.kind === 'note' && event.pitch?.step && event.pitch.octave !== null
     ? { step: event.pitch.step, alter: event.pitch.alter, octave: event.pitch.octave } as Pitch : null
   const [pitch, setPitch] = useState<Pitch>((!adding && selected) || { step: 'C', octave: 4, alter: '0' })
@@ -44,7 +47,7 @@ export default function ScoreCorrectionToolbar({ review, event, measure, positio
   const editable = !disabled && !readOnly
   const patch = (body: unknown) => event && change(`events/${event.id}`, 'PATCH', body)
   const choose = (name: string) => { if (selected) setPitch(selected); setDuration(event?.duration ?? '1'); setExplicitAccidental(event?.accidental?.text ?? null); setTool(tool === name ? '' : name) }
-  const icon = (name: string, label: string, action: () => void, unavailable = false, active = false) => <button type="button" key={name} title={label} aria-label={label} disabled={unavailable} aria-pressed={active} onClick={action}><CorrectionIcon name={name} /></button>
+  const icon = (name: string, label: string, action: () => void, unavailable = false, active = false) => <button type="button" key={name} title={label} aria-label={label} disabled={unavailable} aria-pressed={active} onClick={action}><CorrectionIcon name={name} /><span>{label}</span></button>
   const options = durationChoices(adding ? positionMeasure?.divisions ?? null : event?.divisions ?? measure?.divisions ?? null,
     !adding && !event?.grace ? event?.duration_options : undefined)
   const pitchControls = <>
@@ -71,39 +74,43 @@ export default function ScoreCorrectionToolbar({ review, event, measure, positio
   </div>
   const panel = !readOnly && !adding && !tying && event && tool
   return <div className="score-correction-tools">
-    <div role="toolbar" aria-label="Working score corrections" className="score-icon-toolbar">
-      <div role="group" aria-label="Selection and insertion">
-        {icon('select', 'Select', () => { setTool(''); select() }, disabled, !adding && !tying)}
-        {icon('add', 'Add note', () => { setTool(''); add() }, !editable, adding)}
-        {icon('delete', 'Delete selected notation', () => { void change(`events/${event!.id}`, 'DELETE') }, !editable || !event || adding || tying)}
-      </div>
-      <div role="group" aria-label="Note properties">
-        {icon('pitch', 'Pitch', () => choose('pitch'), !editable || !selected || adding || tying, tool === 'pitch' && !adding)}
-        {icon('duration', 'Duration', () => choose('duration'), !editable || !event || event.grace || adding || tying, tool === 'duration' && !adding)}
-        {icon('accidental', 'Accidental', () => choose('accidental'), !editable || !selected || adding || tying, tool === 'accidental' && !adding)}
-        {icon('size', 'Normal / Small', () => choose('size'), !editable || !event || adding || tying, tool === 'size' && !adding)}
-        {icon('timing', 'Duration-bearing / Grace', () => choose('timing'), !editable || !selected || event?.cue || adding || tying, tool === 'timing' && !adding)}
-      </div>
-      <div role="group" aria-label="Ties and lyrics">
-        {icon('tie', tying ? 'Cancel tie' : 'Tie', () => { setTool(''); tie() }, !editable || !selected || adding || (!tying && event?.tie_source_editable === false), tying)}
-        {icon('lyric', 'Lyric', () => choose('lyric'), !editable || !event || adding || tying, tool === 'lyric' && !adding)}
-      </div>
-      <div role="group" aria-label="History and advanced">
-        {icon('undo', 'Undo', () => { void change('undo', 'POST') }, !editable || !review.can_undo)}
-        {icon('redo', 'Redo', () => { void change('redo', 'POST') }, !editable || !review.can_redo)}
-        {icon('more', 'More / Advanced', advanced, disabled || readOnly)}
-      </div>
+    <div role="toolbar" aria-label="My Score editing tools" className="score-tool-tabs">
+      {(['select', 'note', 'lyrics', 'tie', 'more'] as const).map(name => <button type="button" key={name}
+        disabled={disabled || readOnly} aria-label={name[0].toUpperCase() + name.slice(1)} title={name[0].toUpperCase() + name.slice(1)} aria-pressed={group === name} onClick={() => {
+          setTool(name === 'lyrics' ? 'lyric' : ''); select(); onGroup?.(name)
+
+        }}><CorrectionIcon name={{ select: 'select', note: 'duration', lyrics: 'lyric', tie: 'tie', more: 'more' }[name]} />
+        {name[0].toUpperCase() + name.slice(1)}</button>)}
     </div>
-    {!tying && !adding && event?.tie_correction_error && <p role="status">{event.tie_correction_error}</p>}
-    {tying && <div className="score-context-status" role="status">Tie mode active: the source note is selected. Choose the target note, or Cancel tie. {event?.tie_target_id && <button disabled={!editable} onClick={() => void patch({ tie_to_event_id: null })}>Remove tie</button>}</div>}
-    {!adding && !tying && event?.tie_target_id && <button className="score-remove-tie" disabled={!editable} onClick={() => void patch({ tie_to_event_id: null })}>Remove tie</button>}
-    <div role="group" aria-label="Tie direction">
+    {group === 'note' && <div className="context-actions" role="group" aria-label="Note operations">
+      {icon('add', 'Add note', () => { setTool(''); add() }, !editable, adding)}
+      {event && !adding && <>
+      {icon('delete', 'Delete selected notation', () => { void change(`events/${event!.id}`, 'DELETE') }, !editable || !event || adding || tying)}
+      {icon('pitch', 'Pitch', () => choose('pitch'), !editable || !selected || adding || tying, tool === 'pitch')}
+      {icon('duration', 'Duration', () => choose('duration'), !editable || !event || event.grace || adding || tying, tool === 'duration')}
+      {icon('accidental', 'Accidental', () => choose('accidental'), !editable || !selected || adding || tying, tool === 'accidental')}
+      {icon('size', 'Normal / Small', () => choose('size'), !editable || !event || adding || tying, tool === 'size')}
+      {icon('timing', 'Duration-bearing / Grace', () => choose('timing'), !editable || !selected || event?.cue || adding || tying, tool === 'timing')}
+      </>}
+    </div>}
+    {group === 'tie' && selected && <div className="context-actions" role="group" aria-label="Tie operations">
+      {icon('tie', tying ? 'Cancel tie' : 'Add tie', () => { setTool(''); tie() }, !editable || !selected || adding || (!tying && event?.tie_source_editable === false), tying)}
+      {event && <label>Destination<select aria-label="Tie destination" value={event.tie_target_id ?? ''} disabled={!editable || tying}
+        onChange={e => void patch({ tie_to_event_id: e.target.value || null })}>
+        <option value="">No tie</option>
+        {Array.from(new Set([...(event.tie_target_ids ?? []), ...(event.tie_target_id ? [event.tie_target_id] : [])])).map(id => <option key={id} value={id}>{tieTargets.find(target => target.id === id)?.label ?? 'Existing tie target'}</option>)}
+      </select></label>}
+    </div>}
+    {group === 'tie' && !tying && !adding && event?.tie_correction_error && <p role="status">{event.tie_correction_error}</p>}
+    {group === 'tie' && tying && <div className="score-context-status" role="status">Tie mode active: the source note is selected. Choose the target note, or Cancel tie. {event?.tie_target_id && <button disabled={!editable} onClick={() => void patch({ tie_to_event_id: null })}>Remove tie</button>}</div>}
+    {group === 'tie' && !adding && !tying && event?.tie_target_id && <button className="score-remove-tie" disabled={!editable} onClick={() => void patch({ tie_to_event_id: null })}>Remove tie</button>}
+    {group === 'tie' && selected && <div role="group" aria-label="Tie direction">
       <button type="button" disabled={!editable || !selected || adding || tying} aria-pressed={event?.tie_direction === 'up'}
         onClick={() => void patch({ tie_direction: 'up' })}>Tie Up</button>
       <button type="button" disabled={!editable || !selected || adding || tying} aria-pressed={event?.tie_direction === 'down'}
         onClick={() => void patch({ tie_direction: 'down' })}>Tie Down</button>
-    </div>
-    {adding && <fieldset disabled={!editable} className="score-property-panel" aria-label="Add note properties">
+    </div>}
+    {group === 'note' && adding && <fieldset disabled={!editable} className="score-property-panel" aria-label="Add note properties">
       <legend>Add note</legend>
       <p role="status">{positionMeasure ? `Insertion selected in measure ${positionMeasure.number}.` : 'Click a supported empty position on the score to place the caret.'}</p>
       {event?.onset !== null && event?.staff && measure && <button onClick={() => { setVoiceChoice(event.voice); anchorPosition() }}>Use selected note’s exact onset</button>}
@@ -120,7 +127,7 @@ export default function ScoreCorrectionToolbar({ review, event, measure, positio
       <button disabled={!position || !positionMeasure || !effectivePitch || !voice || (voiceChoice !== 'secondary' && voices.length > 0 && !voices.includes(voice)) || !options.some(([value]) => value === duration)} onClick={() => position && void change('events', 'POST', { measure_id: position.measureId, onset: position.onset, staff: position.staff, voice, kind: 'note', pitch: effectivePitch, duration, display_size: display, grace, written_accidental: explicitAccidental })}>Add</button>
       <button onClick={select}>Cancel</button>
     </fieldset>}
-    {panel && <fieldset disabled={!editable} className="score-property-panel" aria-label={`${tool} properties`}><legend>{tool === 'size' ? 'Display size' : tool === 'timing' ? 'Timing' : tool[0].toUpperCase() + tool.slice(1)}</legend>
+    {(group === 'note' || group === 'lyrics') && panel && <fieldset disabled={!editable} className="score-property-panel" aria-label={`${tool} properties`}><legend>{tool === 'size' ? 'Display size' : tool === 'timing' ? 'Timing' : tool[0].toUpperCase() + tool.slice(1)}</legend>
       <div className="score-property-fields">
         {tool === 'pitch' && <>{pitchControls}<button onClick={() => void patch({ pitch })}>Apply pitch</button></>}
         {tool === 'accidental' && <>{accidentalControl}<button disabled={!effectivePitch} onClick={() => void patch({ pitch: effectivePitch, written_accidental: explicitAccidental })}>Apply accidental</button></>}
@@ -130,8 +137,9 @@ export default function ScoreCorrectionToolbar({ review, event, measure, positio
         </select></label>}
         {tool === 'timing' && <>{event.grace && durationControl}<label>Timing<select aria-label="Selected note timing" value={event.grace ? 'grace' : 'duration-bearing'} onChange={(e) => void patch(e.target.value === 'grace' ? { grace: true } : { grace: false, duration })}><option value="duration-bearing">Duration-bearing</option><option value="grace">Grace</option></select></label></>}
       </div>
-      {tool === 'lyric' && <LyricEditor event={event} lyrics={review.score.lyrics.filter((l) => l.event_id === event.id)} busy={disabled} change={change} lyricOwner={lyricOwner} selectLyricOwner={selectLyricOwner} />}
+      {group === 'lyrics' && <LyricEditor event={event} lyrics={review.score.lyrics.filter((l) => l.event_id === event.id)} busy={disabled} change={change} lyricOwner={lyricOwner} selectLyricOwner={selectLyricOwner} />}
       <button onClick={() => setTool('')}>Close properties</button>
     </fieldset>}
+    {context}
   </div>
 }

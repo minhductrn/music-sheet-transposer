@@ -3,13 +3,13 @@ import { bindLyrics, currentLyric, type LyricBinding, type LyricScope } from '..
 import type { Lyric } from '../types/review'
 import { correctionTieDocument } from '../utils/scoreTies'
 import { standaloneTieScore, drawStandaloneTies } from '../utils/standaloneTies'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { OpenSheetMusicDisplay } from 'opensheetmusicdisplay'
 import { bindRenderer, rendererOptions, reviewDocument } from '../utils/scoreRenderer'
 import type { Score } from '../utils/visualReview'
 import { amount } from '../utils/visualReview'
 import ReviewScoreViewport from './ReviewScoreViewport'
-import { engraveSourceGroups, initialEngravingWidth, trustedSourceGroups, sourceEngravingWidth } from '../utils/sourceEngraving'
+import { engraveSourceGroups, initialEngravingWidth, trustedSourceGroups, sourceEngravingWidth, xmlSourceGroups } from '../utils/sourceEngraving'
 import { insertionLanes, hitInsertion, scorePoint, drawInsertionMarker, renderedScorePages, insertionDiagnosticsEnabled, logInsertionDiagnostic, type VisualInsertionPosition } from '../utils/scoreInsertion'
 import type { Pitch, ScoreSelection } from '../types/review'
 
@@ -19,6 +19,8 @@ interface MusicSheetViewerProps {
   onLyricOwnerSelect?: (lyricId: string | null) => void
   musicXml: Blob | null
   title?: string
+  headerActions?: ReactNode
+  toolbar?: ReactNode
   selection?: ScoreSelection | null
   score?: Score
   onSelect?: (id: string) => void
@@ -32,7 +34,8 @@ interface MusicSheetViewerProps {
 
 export default function MusicSheetViewer({
   musicXml,
-  title = 'Transposed Sheet Music',
+  title = 'My Score',
+  headerActions, toolbar,
   selection = null,
   lyricScope, onLyricApply, onLyricOwnerSelect,
   score, onSelect, onPitchDrop, tieTargetIds = null, interactive = true, insertionMode = false, insertionPosition = null, onPositionSelect,
@@ -176,35 +179,74 @@ export default function MusicSheetViewer({
 
     const musicXmlBlob = musicXml
     let cancelled = false
-    let resizeObserver: ResizeObserver | undefined
     let standaloneCleanup: (() => void) | undefined
+    let cancelWidthWait: (() => void) | undefined
+
+    // Visibility changes do not change the Blob or remount the editing session.
+    // OSMD reads offsetWidth, so wait for actual layout rather than CSS width.
+    function waitForWidth(): Promise<boolean> {
+      const container = containerRef.current
+      if (cancelled || !container) return Promise.resolve(false)
+      const pane = container.closest?.('.review-score-viewport')?.querySelector('.review-score-scroll')
+      const measurable = () => {
+        // An empty max-content surface has no intrinsic width yet.
+        if (container.offsetWidth === 0 && pane && pane.clientWidth > 0) container.style.width = `${pane.clientWidth}px`
+        return container.offsetWidth > 0
+      }
+      if (measurable()) return Promise.resolve(true)
+      return new Promise(resolve => {
+        let settled = false
+        const finish = (ready: boolean) => {
+          if (settled) return
+          settled = true
+          observer.disconnect()
+          cancelWidthWait = undefined
+          resolve(ready)
+        }
+        const observer = new ResizeObserver(() => {
+          if (cancelled) finish(false)
+          else if (measurable()) finish(true)
+        })
+        cancelWidthWait = () => finish(false)
+        observer.observe(container)
+        if (pane) observer.observe(pane)
+      })
+    }
 
     async function renderMusicSheet() {
+      if (!await waitForWidth()) return
       const xml = await musicXmlBlob.text()
 
       if (cancelled || !containerRef.current) {
         return
       }
 
+      if (!await waitForWidth()) return
       containerRef.current.innerHTML = ''
       containerRef.current.style.width = ''
-      let document = reviewDocument(new DOMParser().parseFromString(xml, 'application/xml'), sourceReview ? score : undefined, Boolean(propsRef.current.onSelect))
+      let document = reviewDocument(new DOMParser().parseFromString(xml, 'application/xml'), sourceReview ? score : undefined, Boolean(propsRef.current.onSelect) || !score)
       const standaloneScore = !score && !propsRef.current.onSelect ? standaloneTieScore(document) : null
       if (propsRef.current.onSelect && score?.parts?.some(p => p.measures.some(m => m.voices.some(v => v.events.some(e => e.tie_relationship))))) document = correctionTieDocument(document, score)
-      const groups = sourceReview ? trustedSourceGroups(score) : null
-      const seedWidth = groups ? sourceEngravingWidth(document, groups) : 0
-      containerRef.current.style.width = groups ? `${seedWidth}px` : ''
+      const groups = sourceReview ? trustedSourceGroups(score) : xmlSourceGroups(document)
+      const pageWidth = groups ? 0 : Number(document.getElementsByTagName('page-width')[0]?.textContent)
+      const availableWidth = containerRef.current.closest?.('.review-score-viewport')?.querySelector('.review-score-scroll')?.clientWidth || containerRef.current.clientWidth
+      const measures = groups ? [] : Array.from(document.getElementsByTagName('part')[0]?.children ?? []).filter(e => e.localName === 'measure')
+      const seedWidth = groups ? sourceEngravingWidth(document, groups) : pageWidth > 0 ? pageWidth : availableWidth || sourceEngravingWidth(document, [measures.map((_, index) => index)])
+      setEngravingWidth(seedWidth)
+      containerRef.current.style.width = `${seedWidth}px`
 
+      if (!await waitForWidth()) return
       const osmd = new OpenSheetMusicDisplay(
         containerRef.current,
-        rendererOptions(sourceReview),
+        rendererOptions(Boolean(groups)),
       )
 
       // A Document also handles valid XML without a declaration; strings can be interpreted as URLs.
       await osmd.load(document)
 
+      if (!await waitForWidth()) return
       if (!cancelled) {
-        if (sourceReview && groups) {
+        if (groups) {
           const result = engraveSourceGroups(osmd, groups, (width) => { containerRef.current!.style.width = `${width}px` }, seedWidth)
           setEngravingWidth(result.width)
           setGroupingFailedXml(result.matched ? null : musicXmlBlob)
@@ -214,25 +256,7 @@ export default function MusicSheetViewer({
         identify(osmd, selectionRef.current)
         bind(osmd)
         refreshMarker()
-        let width = containerRef.current!.clientWidth
-        if (sourceReview) return // Fit/pane resizing must not re-engrave trusted groups.
-        resizeObserver = new ResizeObserver(([entry]) => {
-          if (cancelled || entry.contentRect.width === width) return
-          width = entry.contentRect.width
-          try {
-            standaloneCleanup?.()
-            osmd.updateGraphic() // Recalculate beams and layout for the changed container width.
-            osmd.render()
-            if (standaloneScore) standaloneCleanup = drawStandaloneTies(osmd, standaloneScore)
-            identify(osmd, selectionRef.current)
-            bind(osmd)
-            refreshMarker()
-          } catch (error) {
-            setFailedXml(musicXmlBlob)
-            console.error('Unable to resize MusicXML preview:', error)
-          }
-        })
-        resizeObserver?.observe(containerRef.current!)
+
       }
     }
 
@@ -243,12 +267,12 @@ export default function MusicSheetViewer({
 
     return () => {
       cancelled = true
+      cancelWidthWait?.()
       standaloneCleanup?.()
       markerCleanup.current?.(); markerCleanup.current = null
       interactionRef.current?.dispose()
       interactionRef.current = null
       lyricBindings.current?.dispose(); lyricBindings.current = null
-      resizeObserver?.disconnect()
       osmdRef.current?.cursor?.hide()
       osmdRef.current = null
     }
@@ -260,7 +284,10 @@ export default function MusicSheetViewer({
 
   return (
     <div>
-      <h2>{title}</h2>
+      <ReviewScoreViewport title={title} headerActions={headerActions} toolbar={toolbar} sourceReview={true} engravingWidth={engravingWidth}>
+        <div ref={containerRef} onClick={choosePosition} className={sourceReview ? 'source-review-page' : undefined} />
+      </ReviewScoreViewport>
+
       {lyricMessage && <p role="status">{lyricMessage}</p>}
       {lyricTarget && lyricScope && <DirectLyricEditor binding={lyricTarget}
         lyric={currentLyric(lyricTarget, lyricScope)} events={score?.parts.flatMap(p => p.measures.flatMap(m => m.voices.flatMap(v => v.events))) ?? []}
@@ -288,18 +315,15 @@ export default function MusicSheetViewer({
           setLyricMessage('Lyric saved and verified in the Working score.')
         }} />}
 
-      {onPitchDrop && interactive && !insertionMode && tieTargetIds === null && <p className="review-hint">Click a note to select it, or drag it vertically to correct its pitch. Release to apply.</p>}
+
       {selection && <p className="review-selection" role="status">Selected: {selection.label}.</p>}
       {failedXml === musicXml && (
         <p role="alert">Unable to preview this MusicXML. Recognition may have produced unsupported notation.</p>
       )}
-      {score && <p role="status">{sourceReview
+      {score && <details className="render-details"><summary>Layout details</summary><p role="status">{sourceReview
         ? 'Source review layout: engraving is sized to preserve trusted source systems before Fit/zoom.'
-        : 'Responsive review layout: no trusted source system grouping is available.'}</p>}
+        : 'Fixed engraving layout: Fit and zoom change display scale without reflow.'}</p></details>}
       {groupingFailedXml === musicXml && <p role="status">The renderer could not preserve all trusted source systems within the rendering limit. Compare with the source.</p>}
-      {score ? <ReviewScoreViewport sourceReview={sourceReview} engravingWidth={engravingWidth}>
-        <div ref={containerRef} onClick={choosePosition} className={sourceReview ? 'source-review-page' : undefined} />
-      </ReviewScoreViewport> : <div ref={containerRef} />}
     </div>
   )
 }

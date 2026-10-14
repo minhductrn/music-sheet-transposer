@@ -171,3 +171,117 @@ body {
 .musical-symbol-controls button[aria-pressed="true"] { background: #dbeafe; border-color: #2563eb; color: #1e40af; }
 
 .musical-symbol-controls .accidental-clear { font-family: inherit; font-size: .85rem; }
+
+.concert-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; align-items: start; }
+.concert-panel, .concert-result-editor { min-width: 0; max-width: 100%; }
+.concert-panel .recognition-review { margin: 0; padding: .5rem; }
+@media (max-width: 900px) { .concert-workspace { grid-template-columns: 1fr; } }
+
+.concert-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; }
+.concert-controls p { flex-basis: 100%; margin: .25rem 0; }
+.concert-controls label { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
+.concert-save-controls p { margin: .5rem 0; }
+
+/* UX-01: approved compact workspace and two-row editor chrome. */
+:root { color-scheme: light; font-family: Arial, 'Segoe UI', sans-serif; line-height: 1.4; }
+body { background: #fcfcfc; color: #111; }
+.app-shell { max-width: 1440px; padding: 28px 24px; }
+.workspace-shell { border: 1px solid #dedede; border-radius: 20px; padding: 18px; background: #fff; }
+.workspace-header { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid #ececec; }
+.workspace-header h1 { font-size: 22px; font-weight: 600; margin: 0 auto 0 0; }
+.workspace-shell button, .file-action, .workspace-shell select { font: inherit; }
+.workspace-shell button, .file-action { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid #d9d9d9; border-radius: 999px; background: #fff; color: #555; padding: 7px 14px; cursor: pointer; }
+.workspace-shell button:hover:not(:disabled), .file-action:hover { background: #f4f4f4; }
+.workspace-shell button:disabled { opacity: .45; cursor: default; }
+.workspace-shell button[aria-pressed="true"] { background: #f0f0f0; color: #111; }
+.workspace-shell button.primary-action, .concert-apply-row > button { background: #111; color: #fff; border-color: #111; }
+.file-action { position: relative; overflow: hidden; }
+.file-action input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+.file-action:focus-within { outline: 2px solid #555; outline-offset: 3px; }
+.workspace-shell :focus-visible { outline: 2px solid #555; outline-offset: 2px; }
+.connection-indicator { width: 7px; height: 7px; border-radius: 50%; background: #bbb; }
+.connection-success { background: #6b8b70; }
+.connection-error { background: #b64a4a; }
+.workspace-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 10px 0; font-size: 12px; color: #666; }
+.workspace-modes { display: inline-flex; gap: 3px; margin-left: auto; }
+.workspace-modes button { padding: 3px 10px; }
+.empty-import-state { padding: 8px 0; font-size: 14px; color: #666; }
+.import-settings { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.import-settings p { margin: 4px 0; }
+.import-settings label { display: inline-flex; align-items: center; gap: 6px; }
+.workspace-shell .recognition-review { display: flex; flex-direction: column; border: 0; border-radius: 0; margin: 0; padding: 0; background: transparent; }
+.recognition-review > form { display: none; }
+.recognition-review > .save-status { order: 2; font-size: 12px; margin: 8px 0; color: #666; }
+.recognition-review > p, .recognition-review > button { order: 2; }
+.workspace-shell .review-access { margin: 0; }
+.workspace-shell .review-comparison, .workspace-shell .concert-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; margin: 0; align-items: stretch; }
+.workspace-shell .source-viewer, .workspace-shell .review-score, .concert-panel { border: 1px solid #dedede; border-radius: 12px; min-width: 0; padding: 0; background: #fff; overflow: hidden; }
+.concert-panel .recognition-review, .concert-panel .review-score { border: 0; padding: 0; border-radius: 0; }
+.score-panel-header { display: flex; align-items: center; gap: 4px; padding: 10px 12px; min-height: 48px; border-bottom: 1px solid #eee; }
+.score-panel-header h3 { font-size: 17px; margin: 0 auto 0 0; font-weight: 600; }
+.workspace-shell .score-panel-header button { padding: 4px 8px; font-size: 13px; border-color: transparent; border-radius: 6px; }
+.workspace-shell .score-panel-header button[aria-pressed="true"] { border-color: #ddd; background: #fff; }
+.score-tool-tabs { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; padding: 8px 10px; }
+.workspace-shell .score-tool-tabs button { font-size: 13px; padding: 4px 9px; border: 0; }
+.score-tool-tabs svg { width: 16px; height: 16px; }
+.context-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px; }
+.context-actions label { display: inline-flex; gap: 5px; align-items: center; }
+.workspace-shell .context-actions button { border-radius: 6px; padding: 5px 8px; font-size: 12px; }
+.context-actions svg { width: 16px; height: 16px; }
+.editor-context { padding: 0 10px; }
+.editor-context details { margin: 6px 0; }
+.editor-context .review-fields, .editor-context .review-toolbar { gap: 8px; margin: 8px 0; }
+.editor-context p, .score-property-panel p { font-size: 12px; color: #666; }
+.score-correction-tools > [aria-label="Tie direction"] { display: flex; gap: 6px; padding: 0 8px 8px; }
+.workspace-shell .score-property-panel { margin: 0 8px 8px; padding: 8px; border: 1px solid #eee; border-radius: 8px; }
+.workspace-shell .review-score-scroll, .workspace-shell .source-scroll { height: clamp(360px, 65vh, 780px); max-height: none; border: 0; }
+.workspace-shell .source-scroll iframe { display: block; }
+.source-navigation { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 5px 12px; font-size: 12px; }
+.source-navigation input { width: 45px; }
+.source-evidence, .render-details { font-size: 12px; color: #666; margin: 4px 12px; }
+.review-selection { font-size: 12px; margin: 4px 12px; padding: 3px 6px; border-left-color: #aaa; }
+.concert-controls { display: block; padding: 12px 0 16px; }
+.concert-key-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.concert-key-row label { display: flex; flex-direction: column; align-items: stretch; color: #666; gap: 5px; }
+.concert-key-row select { width: 100%; border: 1px solid #d9d9d9; border-radius: 999px; background: #fff; color: #111; padding: 12px 18px; }
+.source-key-confirmation { font-size: 12px; margin: 10px 0; color: #666; }
+.source-key-confirmation label { margin: 4px 12px 4px 0; }
+.source-key-confirmation p { margin: 4px 0; }
+.concert-apply-row { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 12px; margin-top: 12px; }
+.concert-apply-row label { font-size: 12px; color: #666; }
+.concert-apply-row > button { min-width: 110px; padding: 10px 22px; }
+.concert-save-controls { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 12px; padding-top: 14px; }
+.concert-save-controls p { font-size: 12px; color: #666; }
+.concert-panel > p { font-size: 12px; padding: 0 12px; color: #666; }
+.score-placeholder { display: grid; place-items: center; min-height: 360px; color: #888; font-size: 13px; }
+[hidden] { display: none !important; }
+@media (max-width: 900px) {
+  .app-shell { padding: 12px; }
+  .workspace-shell { padding: 12px; }
+  .workspace-shell .review-comparison, .workspace-shell .concert-workspace, .concert-key-row { grid-template-columns: 1fr; }
+  .workspace-header h1 { flex-basis: 100%; font-size: 20px; }
+}
+
+/* UX-01-FIX: align the notation windows, including the read-only toolbar spacer. */
+.workspace-shell .concert-panel .recognition-review { padding: 0; }
+.concert-panel > div > .review-score-viewport > .review-score-scroll,
+.musicxml-original .review-score-scroll { margin-top: 43px; }
+.workspace-shell .concert-panel .review-score { border: 0; }
+
+.workspace-shell .score-tool-tabs { box-sizing: border-box; min-height: 43px; }
+
+/* UX-02A: styles apply only to the initial welcome area. */
+.landing-welcome { text-align: center; padding: clamp(36px, 7vh, 72px) 16px 32px; }
+.landing-welcome h2 { margin: 0 0 18px; font-size: clamp(25px, 3vw, 34px); font-weight: 600; letter-spacing: -.5px; }
+.landing-welcome p { margin: 0 auto 24px; max-width: 640px; font-size: 17px; color: #666; }
+.landing-actions { display: flex; justify-content: center; gap: 12px; }
+.workspace-shell .landing-actions .file-action { flex: 1; max-width: 280px; min-height: 64px; box-sizing: border-box; border-radius: 14px; padding: 16px 22px; color: #1d1d1f; font-size: 18px; background: #fff; }
+.workspace-shell .landing-actions .file-action:hover { border-color: #8baed3; background: #f5f9fe; }
+.landing-actions .file-action:focus-within { outline-color: #3478bd; }
+.workspace-shell:has(.landing-welcome) > .workspace-meta { display: none; }
+.workspace-shell:has(.landing-welcome) > .empty-import-state { padding-top: 0; font-size: 12px; }
+@media (max-width: 560px) {
+  .landing-welcome { padding: 32px 0 24px; }
+  .landing-actions { flex-direction: column; align-items: stretch; }
+  .workspace-shell .landing-actions .file-action { max-width: none; width: 100%; flex: auto; }
+}

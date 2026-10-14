@@ -53,11 +53,11 @@ test('cancelled picker and failed writes never report success; failed stream is 
 function find(tree, predicate) {
   if (!tree || typeof tree !== 'object') return null
   if (predicate(tree)) return tree
-  for (const child of [tree.props?.children].flat(Infinity)) { const result = find(child, predicate); if (result) return result }
+  for (const child of [tree.props?.children, tree.props?.headerActions, tree.props?.toolbar, tree.props?.context, tree.props?.moreControls].flat(Infinity)) { const result = find(child, predicate); if (result) return result }
   return null
 }
-const button = (tree, label) => find(tree, e => e.type === 'button' && e.props.children === label)
-const text = tree => !tree || typeof tree !== 'object' ? String(tree ?? '') : [tree.props?.children].flat(Infinity).map(text).join(' ')
+const button = (tree, label) => find(tree, e => e.type === 'button' && (e.props.children === label || e.props['aria-label'] === label))
+const text = tree => !tree || typeof tree !== 'object' ? String(tree ?? '') : [tree.props?.children, tree.props?.headerActions, tree.props?.toolbar, tree.props?.context, tree.props?.moreControls].flat(Infinity).map(text).join(' ')
 function editor({ invalid = false, writeFails = false, direct = false } = {}) {
   const file = local(direct ? { showSaveFilePicker: async () => ({ name: 'chosen.musicxml', createWritable: async () => ({
     write: async () => { if (writeFails) throw new Error('Disk full') }, close: async () => {}, abort: async () => {},
@@ -128,5 +128,27 @@ test('technical corruption or disk failure displays an actionable error without 
     assert.equal(view.saves.length, 0); assert.equal(view.downloads.length, 0)
     assert.match(text(find(view.render(), e => e.props?.role === 'alert')), options.invalid ? /Repair the missing duration/ : /Disk full/)
     if (options.invalid) assert.equal(view.calls.length, 0)
+  }
+})
+
+test('UX-01 header form submission uses the same validated MusicXML save and acknowledgement path', async () => {
+  const view = editor()
+  const form = find(view.render(), node => node.type === 'form')
+  let prevented = false
+  form.props.onSubmit({ preventDefault() { prevented = true } })
+  await tick()
+  assert.equal(prevented, true)
+  assert.ok(button(view.render(), 'I saved the downloaded file'))
+})
+
+test('saved MusicXML supplies read-only Original and keeps its snapshot after edits', async () => {
+  const view = editor({ direct: true })
+  button(view.render(), 'Save').props.onClick(); await tick()
+  for (const afterEdit of [false, true]) {
+    if (afterEdit) view.edit()
+    const original = find(view.render(), n => n.type === './MusicSheetViewer' && n.props.title === 'Original')
+    assert.equal(original.props.musicXml, xml)
+    assert.equal(original.props.interactive, false)
+    assert.equal(original.props.onSelect, undefined)
   }
 })

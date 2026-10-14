@@ -11,3 +11,8 @@ frontend/dist/
 # Environment variables
 .env
 *.local
+
+# Local user imports and generated scores (PDF, images, MusicXML).
+/local-user-artifacts/
+/review-cungdemtimung.musicxml
+/backend/tests/music/fixtures/p05_benchmark_raw.musicxml

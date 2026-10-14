@@ -40,14 +40,14 @@ function harness(path, props, dependencies = {}, exportName = 'default') {
 function find(tree, predicate) {
   if (!tree || typeof tree !== 'object') return null
   if (predicate(tree)) return tree
-  const children = tree.props?.children
+  const children = [tree.props?.children, tree.props?.headerActions, tree.props?.toolbar, tree.props?.context, tree.props?.moreControls]
   for (const child of Array.isArray(children) ? children.flat(Infinity) : [children]) {
     const found = find(child, predicate)
     if (found) return found
   }
   return null
 }
-const button = (tree, label) => find(tree, (e) => e.type === 'button' && e.props.children === label)
+const button = (tree, label) => find(tree, (e) => e.type === 'button' && (e.props.children === label || e.props['aria-label'] === label))
 const field = (tree, name) => find(tree, (e) => e.props?.['aria-label'] === name)
 const plain = (value) => JSON.parse(JSON.stringify(value))
 const event = { id: 'note', kind: 'note', pitch: { step: 'A', alter: '0', octave: 4 }, onset: '0', duration: '2', divisions: '4', voice: '2', staff: 1, grace: false, ties: [], lyric_ids: [], tie_target_ids: ['target'], tie_target_id: null }
@@ -258,7 +258,7 @@ test('backend-restricted duration choices and per-event key context reach visual
   assert.deepEqual(plain(find(view.render(), (e) => typeof e.type === 'function' && e.type.name === 'DurationPicker').props.supported), ['1', '2'])
 })
 
-test('OSMD refresh discards late loads, rebuilds bindings and refreshes highlight on resize', async () => {
+test('OSMD refresh discards late loads, rebuilds bindings and keeps engraving stable on resize', async () => {
   const states = []; const effects = []; let slot = 0; const scheduled = []
   const instances = []; const highlights = []; let resize
   const jsx = (type, props) => ({ type, props })
@@ -276,12 +276,12 @@ test('OSMD refresh discards late loads, rebuilds bindings and refreshes highligh
     compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
   }).outputText, {
     module, exports: module.exports, console,
-    DOMParser: class { parseFromString(xml) { return { xml } } },
+    DOMParser: class { parseFromString(xml) { return { xml, getElementsByTagName: () => [] } } },
     ResizeObserver: class { constructor(fn) { resize = fn } observe() {} disconnect() {} },
     require(name) {
       if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx }
       if (name === 'opensheetmusicdisplay') return { OpenSheetMusicDisplay: Renderer }
-      if (name === '../utils/sourceEngraving') return { initialEngravingWidth: 1000, trustedSourceGroups: () => null }
+      if (name === '../utils/sourceEngraving') return { initialEngravingWidth: 1000, trustedSourceGroups: () => null, xmlSourceGroups: () => null }
       if (name === '../utils/scoreRenderer') return { rendererOptions: () => ({}), reviewDocument: (doc) => doc, bindRenderer: () => ({ highlight: (...args) => highlights.push(args), dispose() {} }) }
       if (name === 'react') return {
         useRef(initial) { const i = slot++; states[i] ??= { current: initial }; return states[i] },
@@ -294,7 +294,7 @@ test('OSMD refresh discards late loads, rebuilds bindings and refreshes highligh
       return {}
     },
   })
-  const container = { innerHTML: '', clientWidth: 600, style: {} }
+  const container = { innerHTML: '', clientWidth: 600, get offsetWidth() { return this.clientWidth }, style: {} }
   function render(blob, id = 'note', targets = null) {
     slot = 0
     const tree = module.exports.default({ musicXml: blob, score, selection: { eventId: id, measureIndex: 0, onset: '0', label: 'note' }, onSelect() {}, tieTargetIds: targets })
@@ -310,8 +310,10 @@ test('OSMD refresh discards late loads, rebuilds bindings and refreshes highligh
   assert.equal(instances[1].renders, 1)
   render(second, 'target', ['note'])
   assert.deepEqual(plain(highlights.at(-1)), ['target', ['note']])
-  resize([{ contentRect: { width: 700 } }])
-  assert.equal(instances[1].renders, 2)
+  container.clientWidth = 700
+  render(second, 'target', ['note'])
+  assert.equal(resize, undefined)
+  assert.equal(instances[1].renders, 1)
   assert.deepEqual(plain(highlights.at(-1)), ['target', ['note']])
 })
 
@@ -361,6 +363,7 @@ test('right pane switches read-only Transposed and keeps original source visible
   const transposed = {derived:true}
   const view = harness('../src/components/RecognitionReview.tsx', {review,transposed,onChange(){},onBusy(){},download(){}})
   assert.equal(find(view.render(),e=>e.type==='./MusicSheetViewer').props.musicXml,review.musicXml)
+  find(view.render(), e => e.type === './ScoreCorrectionToolbar').props.onGroup('more')
   button(view.render(),'Transposed').props.onClick()
   let tree=view.render(); const pane=find(tree,e=>e.type==='./MusicSheetViewer')
   assert.equal(pane.props.musicXml,transposed); assert.equal(pane.props.interactive,false)

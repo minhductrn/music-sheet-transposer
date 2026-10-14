@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import ReviewScoreViewport from './ReviewScoreViewport'
 import { getReviewSource } from '../services/api'
 import type { ReviewSession, SourceLocation } from '../types/review'
 
@@ -7,7 +8,7 @@ export default function SourceViewer({ review, location }: { review: ReviewSessi
   const [navigation, setNavigation] = useState({ selectionKey: '', page: 1 })
   const page = navigation.selectionKey === selectionKey ? navigation.page : location?.page ?? 1
   const [imageSize, setImageSize] = useState<{ id: string; width: number; height: number } | null>(null)
-  const [zoom, setZoom] = useState(100)
+  const [zoom, setZoom] = useState<number | 'fit'>('fit')
   const [source, setSource] = useState<{ id: string; url: string; error?: string } | null>(null)
   const hasSource = Boolean(review.source)
 
@@ -41,32 +42,42 @@ export default function SourceViewer({ review, location }: { review: ReviewSessi
         width: `${box[2] / width * 100}%`, height: `${box[3] / height * 100}%` } : null
   return (
     <section className="source-viewer" aria-label="Original source">
-      <h3>Original source</h3>
-      {location ? <p role="status">Selected evidence: page {location.page}{box ? ` · box ${box.join(', ')}` : ' · geometry unavailable'}.
+      {(!active?.url || pdf) && <div className="score-panel-header"><h3>Original</h3>
+        {pdf && <>
+          <button aria-pressed={zoom === 'fit'} onClick={() => setZoom('fit')}>Fit</button>
+          <button aria-label="Zoom original out" disabled={zoom !== 'fit' && zoom <= 25} onClick={() => setZoom(Math.max(25, (zoom === 'fit' ? 100 : zoom) - 25))}>−</button>
+          <button aria-label="Reset original zoom to 100%" onClick={() => setZoom(100)}>{zoom === 'fit' ? 'Fit' : `${zoom}%`}</button>
+          <button aria-label="Zoom original in" disabled={zoom !== 'fit' && zoom >= 300} onClick={() => setZoom(Math.min(300, (zoom === 'fit' ? 100 : zoom) + 25))}>+</button>
+        </>}
+      {location && <details className="source-evidence"><summary>Source evidence</summary>      {location ? <p role="status">Selected evidence: page {location.page}{box ? ` · box ${box.join(', ')}` : ' · geometry unavailable'}.
         {pdf ? ' PDF page navigation is coordinated; the native PDF viewer does not support a box overlay.' : !highlight ? ' A source highlight is unavailable until compatible image geometry is present.' : ''}</p>
-        : <p>No source geometry is available for this event.</p>}
+        : null}
+</details>}
+      </div>}
       {!review.source && <p>No source retained for this session.</p>}
       {active?.error && <p role="alert">{active.error}</p>}
       {review.source && !active && <p>Loading original source…</p>}
       {active?.url && <>
-        <div className="review-toolbar">
-          {pdf && <label>Page <input type="number" min={1} max={review.source?.pages} value={page}
-            onChange={(e) => setNavigation({ selectionKey, page: Math.max(1, Math.min(review.source?.pages ?? 1, Number(e.target.value) || 1)) })} /> / {review.source?.pages}</label>}
-          <label>Zoom <select value={zoom} onChange={(e) => setZoom(Number(e.target.value))}>
-            {[50, 75, 100, 125, 150, 200, 300].map((value) => <option key={value} value={value}>{value}%</option>)}
-          </select></label>
-          <a href={active.url} target="_blank" rel="noreferrer">Open source</a>
-        </div>
-        <div className="source-scroll">
-          {pdf ? <iframe title={`Original PDF, page ${page}`} src={`${active.url}#page=${page}&zoom=${zoom}`} />
-            : <div className="source-image" style={{ width: `${zoom}%` }}>
-              <img alt="Original uploaded music sheet" src={active.url} style={{ width: '100%' }}
-                onLoad={(event) => setImageSize({ id: review.id, width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} />
-              {highlight && <div aria-label="Selected recognition evidence location" className="source-highlight" style={highlight} />}
-            </div>}
-        </div>
+        {pdf ? <>
+          <div className="source-navigation">
+            <label>Page <input type="number" min={1} max={review.source?.pages} value={page}
+              onChange={e => setNavigation({ selectionKey, page: Math.max(1, Math.min(review.source?.pages ?? 1, Number(e.target.value) || 1)) })} /> / {review.source?.pages}</label>
+            <a href={active.url} target="_blank" rel="noreferrer">Open source</a>
+          </div>
+          <div className="source-scroll"><iframe title={`Original PDF, page ${page}`} src={`${active.url}#page=${page}&zoom=${zoom === 'fit' ? 'page-width' : zoom}`} /></div>
+        </> : <ReviewScoreViewport title="Original" headerActions={<a href={active.url} target="_blank" rel="noreferrer" title="Open source" aria-label="Open source">↗</a>} sourceReview engravingWidth={imageSize?.id === review.id ? imageSize.width : undefined}>
+          <div className="source-image" style={{ width: '100%' }}>
+            <img alt="Original uploaded music sheet" src={active.url} style={{ width: '100%' }}
+              onLoad={event => setImageSize({ id: review.id, width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} />
+            {highlight && <div aria-label="Selected recognition evidence location" className="source-highlight" style={highlight} />}
+          </div>
+        </ReviewScoreViewport>}
         {pdf && <p className="review-hint">PDF controls depend on your browser’s PDF viewer. Use Open source if embedded navigation is unavailable.</p>}
       </>}
+      {location && <details className="source-evidence"><summary>Source evidence</summary>      {location ? <p role="status">Selected evidence: page {location.page}{box ? ` · box ${box.join(', ')}` : ' · geometry unavailable'}.
+        {pdf ? ' PDF page navigation is coordinated; the native PDF viewer does not support a box overlay.' : !highlight ? ' A source highlight is unavailable until compatible image geometry is present.' : ''}</p>
+        : null}
+</details>}
     </section>
   )
 }

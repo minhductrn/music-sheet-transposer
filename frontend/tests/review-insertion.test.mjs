@@ -49,7 +49,7 @@ function componentHarness(props) {
 function element(tree, predicate) {
   if (!tree || typeof tree !== 'object') return null
   if (predicate(tree)) return tree
-  const children = tree.props?.children
+  const children = [tree.props?.children, tree.props?.headerActions, tree.props?.toolbar, tree.props?.context, tree.props?.moreControls]
   for (const child of Array.isArray(children) ? children.flat(Infinity) : [children]) {
     const found = element(child, predicate)
     if (found) return found

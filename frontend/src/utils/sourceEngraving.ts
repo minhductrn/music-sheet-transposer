@@ -63,3 +63,25 @@ export function engraveSourceGroups(osmd: OpenSheetMusicDisplay, groups: number[
   }
   return { width, matched: false }
 }
+
+/** Saved preview uses the same explicit MusicXML system boundaries as Review. */
+export function xmlSourceGroups(document: Document): number[][] | null {
+  const parts = Array.from(document.documentElement.children).filter(e => e.localName === 'part')
+  let common: number[][] | undefined
+  for (const part of parts) {
+    const measures = Array.from(part.children).filter(e => e.localName === 'measure')
+    if (!measures.length) return null
+    const groups: number[][] = [[]]
+    let explicit = false
+    measures.forEach((measure, index) => {
+      const print = Array.from(measure.children).find(e => e.localName === 'print')
+      if (index && (print?.getAttribute('new-system') === 'yes' || print?.getAttribute('new-page') === 'yes')) {
+        groups.push([]); explicit = true
+      }
+      groups[groups.length - 1].push(index)
+    })
+    if (!explicit || (common && JSON.stringify(common) !== JSON.stringify(groups))) return null
+    common = groups
+  }
+  return common ?? null
+}

@@ -15,7 +15,7 @@ const zoom = load('../src/utils/reviewZoom.ts')
 function find(tree, predicate) {
   if (!tree || typeof tree !== 'object') return null
   if (predicate(tree)) return tree
-  const children = tree.props?.children
+  const children = [tree.props?.children, tree.props?.headerActions, tree.props?.toolbar, tree.props?.context, tree.props?.moreControls]
   for (const child of Array.isArray(children) ? children.flat(Infinity) : [children]) {
     const result = find(child, predicate)
     if (result) return result
@@ -63,7 +63,7 @@ function viewport(sourceReview = true, engravingWidth = 1000) {
     find(tree, (e) => e.props?.className === 'review-score-surface').props.ref.current = surface
     return tree
   }
-  render(); const dispose = effects.map((fn) => fn())
+  render(); const dispose = effects.map((fn) => fn()).filter(fn => typeof fn === 'function')
   return { render, pane, surface, observations, children, dispose, cleanup }
 }
 
@@ -75,7 +75,7 @@ test('review defaults to Fit; zoom and resize retain engraving width and rendere
   assert.equal(surface().props.style.width, 1000)
   assert.equal(surface().props.children, view.children)
   assert.equal(find(tree, (e) => e.props?.className === 'review-score-stage').props.style.height, 1000)
-  find(tree, (e) => e.props?.children === '100%').props.onClick()
+  find(tree, (e) => e.props?.['aria-label'] === 'Reset score zoom to 100%').props.onClick()
   tree = view.render()
   assert.equal(surface().props.style.transform, 'scale(1)')
   assert.equal(surface().props.style.width, 1000)
@@ -99,7 +99,7 @@ test('responsive review zoom does not alter the pane-based engraving width', () 
   let tree = view.render()
   const surface = () => find(tree, (e) => e.props?.className === 'review-score-surface')
   assert.equal(surface().props.style.width, 500)
-  find(tree, (e) => e.props?.children === '100%').props.onClick()
+  find(tree, (e) => e.props?.['aria-label'] === 'Reset score zoom to 100%').props.onClick()
   tree = view.render()
   assert.equal(surface().props.style.width, 500)
 })
@@ -118,14 +118,14 @@ test('workspace CSS bounds independent source/score scroll panes and proportiona
 
 test('technical integrity is in Advanced; optional music check and source controls remain', () => {
   const source = readFileSync(new URL('../src/components/RecognitionReview.tsx', import.meta.url), 'utf8')
-  assert.ok(source.indexOf('className="review-validation"') < source.indexOf('className="review-comparison"'))
+  assert.ok(source.includes('className="review-validation"'))
   assert.equal((source.match(/<summary>Technical score details/g) ?? []).length, 1)
-  assert.match(source, /className="review-validation" hidden=\{!advanced\}/)
+  assert.match(source, /className="review-validation" hidden=\{editorTool !== 'more'\}/)
   assert.match(source, />Advanced Review<\/button>/)
   assert.match(source, /<VisualNoteEditor/)
   const pdf = readFileSync(new URL('../src/components/SourceViewer.tsx', import.meta.url), 'utf8')
   assert.match(pdf, /Open source/)
-  assert.match(pdf, /#page=\$\{page\}&zoom=\$\{zoom\}/)
+  assert.match(pdf, /#page=\$\{page\}&zoom=/)
 })
 
 test('viewer passes explicit source-break options and its rendering document to OSMD', async () => {
@@ -155,7 +155,7 @@ test('viewer passes explicit source-break options and its rendering document to 
     ResizeObserver: class { observe() {} disconnect() {} },
   }).default
   const tree = component({ musicXml: { text: async () => '<score-partwise/>' }, score, onSelect() {} })
-  find(tree, (e) => e.props?.ref).props.ref.current = { innerHTML: '', clientWidth: 320, style: {} }
+  find(tree, (e) => e.props?.ref).props.ref.current = { innerHTML: '', clientWidth: 320, offsetWidth: 320, style: {} }
   for (const fn of effects) { const dispose = fn(); if (dispose) cleanups.push(dispose) }
   await new Promise(setImmediate)
   assert.deepEqual(captures[0].options, { newSystemFromXML: true, newPageFromXML: true })
@@ -176,8 +176,74 @@ test('measured engraving surface stays fixed across narrow pane changes and Fit/
   view.pane.clientWidth = 250; view.observations[0](); tree = view.render()
   assert.equal(surface().props.style.width, 2400)
   assert.equal(surface().props.style.transform, `scale(${250 / 2400})`)
-  find(tree, (e) => e.props?.children === '100%').props.onClick(); tree = view.render()
+  find(tree, (e) => e.props?.['aria-label'] === 'Reset score zoom to 100%').props.onClick(); tree = view.render()
   assert.equal(surface().props.style.width, 2400)
   assert.equal(surface().props.style.transform, 'scale(1)')
   assert.equal(surface().props.children, view.children)
+})
+
+test('UX-01 Original and My Score zoom states are independent', () => {
+  const original = viewport(), working = viewport()
+  find(original.render(), node => node.props?.['aria-label'] === 'Reset score zoom to 100%').props.onClick()
+  assert.equal(find(original.render(), node => node.props?.className === 'review-score-surface').props.style.transform, 'scale(1)')
+  assert.equal(find(working.render(), node => node.props?.className === 'review-score-surface').props.style.transform, 'scale(0.5)')
+  find(working.render(), node => node.props?.['aria-label'] === 'Zoom score in').props.onClick()
+  assert.equal(find(original.render(), node => node.props?.className === 'review-score-surface').props.style.transform, 'scale(1)')
+  original.dispose.forEach(fn => fn()); working.dispose.forEach(fn => fn())
+})
+
+test('UX-01 source image retains Open source; PDF Fit requests native page-width without changing score data', async () => {
+  async function source(media_type) {
+    const states = [], effects = []; let slot = 0
+    const jsx = (type, props) => ({ type, props })
+    const review = Object.freeze({ id: 'source', source: Object.freeze({ media_type, pages: 2 }) })
+    const component = load('../src/components/SourceViewer.tsx', {
+      react: { useState(initial) { const i = slot++; if (!(i in states)) states[i] = initial; return [states[i], value => { states[i] = value }] },
+        useEffect(effect) { const i = slot++; if (!(i in states)) { states[i] = true; effects.push(effect) } } },
+      'react/jsx-runtime': { jsx, jsxs: jsx },
+      '../services/api': { getReviewSource: async () => new Blob(['source']) },
+    }, { AbortController, URL: { createObjectURL: () => 'blob:original', revokeObjectURL() {} } }).default
+    const render = () => { slot = 0; return component({ review, location: null }) }
+    render(); const cleanups = effects.map(effect => effect()); await new Promise(setImmediate)
+    return { render, cleanups }
+  }
+  const image = await source('image/png')
+  const viewport = find(image.render(), node => node.type === './ReviewScoreViewport')
+  assert.equal(viewport.props.title, 'Original')
+  assert.equal(viewport.props.headerActions.props.href, 'blob:original')
+  assert.equal(viewport.props.headerActions.props['aria-label'], 'Open source')
+  const pdf = await source('application/pdf')
+  assert.match(find(pdf.render(), node => node.type === 'iframe').props.src, /page=1&zoom=page-width$/)
+  find(pdf.render(), node => node.props?.['aria-label'] === 'Zoom original in').props.onClick()
+  assert.match(find(pdf.render(), node => node.type === 'iframe').props.src, /zoom=125$/)
+  find(pdf.render(), node => node.type === 'button' && node.props.children === 'Fit').props.onClick()
+  assert.match(find(pdf.render(), node => node.type === 'iframe').props.src, /zoom=page-width$/)
+  assert.equal(find(image.render(), node => node.type === './ReviewScoreViewport').props.sourceReview, true)
+  image.cleanups.forEach(fn => fn()); pdf.cleanups.forEach(fn => fn())
+})
+
+test('Fit measures both panes; zoom preserves layout and reports actual scale', () => {
+  const left = viewport(true, 1000), right = viewport(true, 1000)
+  left.pane.clientWidth = 640; right.pane.clientWidth = 640
+  left.observations[0](); right.observations[0]()
+  const surface = tree => find(tree, e => e.props?.className === 'review-score-surface')
+  for (const view of [left, right]) {
+    assert.equal(surface(view.render()).props.style.transform, 'scale(0.64)')
+    assert.equal(find(view.render(), e => e.props?.['aria-label'] === 'Reset score zoom to 100%').props.children.join(''), '64%')
+  }
+  find(left.render(), e => e.props?.['aria-label'] === 'Zoom score in').props.onClick()
+  assert.equal(surface(left.render()).props.style.transform, 'scale(0.74)')
+  assert.equal(surface(right.render()).props.style.transform, 'scale(0.64)')
+  assert.equal(surface(left.render()).props.style.width, 1000)
+  assert.equal(surface(left.render()).props.children, left.children)
+})
+test('compact landing keeps direct import/open and equal comparison columns', () => {
+  const home = readFileSync(new URL('../src/pages/Home.tsx', import.meta.url), 'utf8')
+  assert.match(home, /className="workspace-header"/)
+  assert.match(home, /Import PDF \/ Image/)
+  assert.match(home, /Open MusicXML/)
+  for (const removed of ['Import → Review', '<h2>Backend connection', '<h2>Concert Workspace', '<summary>Import PDF']) assert.equal(home.includes(removed), false)
+  const css = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8')
+  assert.match(css, /grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1fr\)/)
+  assert.match(css, /review-score-scroll, .workspace-shell .source-scroll \{ height: clamp/)
 })

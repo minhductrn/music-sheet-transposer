@@ -1,6 +1,6 @@
 import { chooseScoreFile, writeScoreFile, type ScoreFileHandle, type SavedScoreFile } from '../utils/localScoreFile'
 import { currentLyric, type LyricBinding } from '../utils/lyricInteraction'
-import { useRef, useState } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { changeReview, checkReviewMusic, closeReview, getReview, getVerifiedMusicXml } from '../services/api'
 import type { MusicCheckResult, Harmony, Measure, ReviewSession, ScoreSelection } from '../types/review'
 import EventInspector from './EventInspector'
@@ -9,7 +9,7 @@ import MusicSheetViewer from './MusicSheetViewer'
 import SourceViewer from './SourceViewer'
 import VisualNoteEditor, { AuxiliaryLyricNotice } from './VisualNoteEditor'
 import MusicalPositionEditor from './MusicalPositionEditor'
-import ScoreCorrectionToolbar from './ScoreCorrectionToolbar'
+import ScoreCorrectionToolbar, { type EditorTool } from './ScoreCorrectionToolbar'
 import type { VisualInsertionPosition } from '../utils/scoreInsertion'
 import { auxiliaryLyricOwner, friendlyDiagnostic, sessionExpired } from '../utils/visualReview'
 
@@ -83,11 +83,14 @@ interface Props {
   download: (blob: Blob, filename: string) => void
   savedFile?: SavedScoreFile | null
   onSaved?: (file: SavedScoreFile) => void
+  moreControls?: ReactNode
+  resultOnly?: boolean
   transposed?: Blob | null
 }
 
-export default function RecognitionReview({ review, onChange, onBusy, download, transposed = null, savedFile = null, onSaved }: Props) {
+export default function RecognitionReview({ review, onChange, onBusy, download, transposed = null, savedFile = null, onSaved, resultOnly = false, moreControls }: Props) {
   const [musicCheck, setMusicCheck] = useState<MusicCheckResult | null>(null)
+  const [editorTool, setEditorTool] = useState<EditorTool>('select')
   const [advanced, setAdvanced] = useState(false)
   const [rightView, setRightView] = useState('corrected')
   const [positionStaff, setPositionStaff] = useState(1)
@@ -203,14 +206,14 @@ export default function RecognitionReview({ review, onChange, onBusy, download, 
   }
   const selectDirectLyricOwner = (id: string | null) => {
     if (busy || expired || showingTransposed || adding || tieSource) return
-    if (id === null) { setAdvanced(true); return }
+    if (id === null) { setEditorTool('lyrics'); setAdvanced(true); return }
     const owners = review.score.lyrics.filter(l => l.id === id)
     if (owners.length !== 1) return
     const target = measures.find(({ measure: m }) => m.voices.some(v => v.events.some(e => e.id === owners[0].event_id)))
     const selected = target?.measure.voices.flatMap(v => v.events).find(e => e.id === owners[0].event_id)
     // Explicit selection only. Never route this action through the pending-tie selectEvent handler.
     if (target && selected) {
-      setMeasureId(target.measure.id); setVoiceId(selected.voice); setEventId(selected.id); setAdvanced(true)
+      setMeasureId(target.measure.id); setVoiceId(selected.voice); setEventId(selected.id); setEditorTool('lyrics'); setAdvanced(true)
       setError(`Selected canonical lyric ${id}, verse ${owners[0].number}. Use T (Lyric) or Lyrics on selected event in Advanced Review.`)
     }
   }
@@ -253,44 +256,28 @@ export default function RecognitionReview({ review, onChange, onBusy, download, 
     })
   }
 
-  return <section className="status-card recognition-review">
-    <h2>Score Editor</h2>
-    <p role="status">{busy ? 'Applying changes…' : saved ? `Saved: ${savedFile?.filename}` : 'Unsaved changes — save the Working Score to a local MusicXML file.'}</p>
-    <p>Save confirms the current Working Score as your Canonical Concert Score. Keep the local file; editing sessions are temporary.</p>
-    {saveMessage && (saved || pendingDownload?.revision === review.revision) && <p role="status">{saveMessage}</p>}
-    {pendingDownload && pendingDownload.reviewId === review.id && pendingDownload.revision === review.revision && <button disabled={busy} onClick={() => {
-      onSaved?.(pendingDownload); setPendingDownload(null)
-      setSaveMessage('You confirmed that the downloaded MusicXML file was saved locally.')
-    }}>I saved the downloaded file</button>}
-    <div className="review-toolbar">
-      <button disabled={busy || expired || !review.can_undo} onClick={() => void change('undo', 'POST')}>Undo</button>
-      <button disabled={busy || expired || !review.can_redo} onClick={() => void change('redo', 'POST')}>Redo</button>
+  const contextControls = <div className="editor-context" hidden={editorTool !== 'more' && !advanced}>
+    <div className="context-actions" hidden={editorTool !== 'more'}>
+      <button aria-pressed={!advanced} onClick={() => { setEditorTool('select'); setAdvanced(false); setTieSource(''); setAdding(false); setInsertionPosition(null) }}>Visual Review</button>
+      <button aria-pressed={advanced} onClick={() => { setEditorTool('note'); setAdvanced(true); setTieSource(''); setAdding(false); setInsertionPosition(null) }}>Advanced Review</button>
       <button disabled={busy} onClick={() => void perform(() => getReview(review.id))}>Reload review</button>
+      {!resultOnly && <>
       <button disabled={busy || expired} onClick={() => void saveScore(false)}>Save</button>
       <button disabled={busy || expired} onClick={() => void saveScore(true)}>Save As</button>
       <button disabled={busy || !savedFile} onClick={() => {
         if (savedFile) download(savedFile.blob, savedFile.filename)
       }}>Export saved MusicXML</button>
       {savedFile && !saved && <span>Export uses the last saved version. Save to include current edits.</span>}
-      <button disabled={busy} onClick={() => void perform(async () => { await closeReview(review.id); return null })}>Close review</button>
+      <button disabled={busy} onClick={() => { if (!saved && !window.confirm('Close this review and discard unsaved work?')) return; void perform(async () => { await closeReview(review.id); return null }) }}>Close review</button>
+      </>}
     </div>
-    <div className="review-toolbar" aria-label="Review mode">
-      <button aria-pressed={!advanced} onClick={() => { setAdvanced(false); setTieSource(''); setAdding(false); setInsertionPosition(null) }}>Visual Review</button>
-      <button aria-pressed={advanced} onClick={() => { setAdvanced(true); setTieSource(''); setAdding(false); setInsertionPosition(null) }}>Advanced Review</button>
-    </div>
-    <p>See the mistake → click it → correct it. Click a notehead, or focus it and press Enter. When a note cannot be mapped safely, use Advanced Review.</p>
-    {expired && <div role="alert" className="status-error">This editing session expired. Open your saved MusicXML to continue, or download an unvalidated recovery copy of the browser-held edits.
-      <button onClick={() => download(review.musicXml, 'unsaved-recovery.musicxml')}>Download recovery copy</button>
-    </div>}
-
-    <fieldset disabled={expired} className="visual-review-body">
-    <details className="review-validation" hidden={!advanced}>
+    <details className="review-validation" hidden={editorTool !== 'more'}>
     <summary>Technical score details</summary>
     <ul className="review-diagnostics">{review.validation.diagnostics.filter(issue => issue.blocking).map((issue, index) => <li key={index}>
       {issue.message}{issue.event_id && <button disabled={busy} onClick={() => selectEvent(issue.event_id!)}>Inspect event</button>}
     </li>)}</ul>
     </details>
-    <details className="review-music-check">
+    <details className="review-music-check" hidden={editorTool !== 'more'}>
       <summary>Optional music check</summary>
       <p>Check score offers musical review suggestions. It never changes notation and is not required before Save.</p>
       <button disabled={busy || expired} onClick={() => void checkScore()}>Check score</button>
@@ -304,35 +291,12 @@ export default function RecognitionReview({ review, onChange, onBusy, download, 
         {musicCheck.truncated && <p>Additional findings were omitted.</p>}
       </div>}
     </details>
-    <div className="review-comparison">
-      <SourceViewer review={review} location={null} />
-      <div className="review-score">
-    {error && <div role="alert" className="status-error">{error}{!advanced && <details><summary>Show technical details</summary>{error}</details>}</div>}
-        <div role="toolbar" aria-label="Right pane view">
+        {editorTool === 'more' && !resultOnly && <div role="toolbar" aria-label="Right pane view">
           <button aria-pressed={!showingTransposed} onClick={() => setRightView('corrected')}>Corrected</button>
           <button disabled={!transposed} aria-pressed={showingTransposed} onClick={() => { setRightView('transposed'); setTieSource(''); setAdding(false); setInsertionPosition(null) }}>Transposed</button>
-        </div>
-        <ScoreCorrectionToolbar key={`tools-${review.revision}-${event?.id ?? 'none'}-${adding}-${insertionPosition?.measureId ?? ''}-${insertionPosition?.staff ?? ''}`} review={review} event={event} measure={measure}
-          lyricOwner={lyricOwner} selectLyricOwner={selectLyricOwner}
-          anchorPosition={() => { if (event?.onset != null && event?.staff && measure) setInsertionPosition({ measureId: measure.id, onset: event.onset, staff: event.staff }) }}
-          position={insertionPosition} adding={adding} tying={!!tieSource} disabled={busy || expired} readOnly={showingTransposed} change={change}
-          select={() => { setAdding(false); setInsertionPosition(null); setTieSource('') }}
-          add={() => { setAdding(!adding); setInsertionPosition(null); setTieSource('') }}
-          tie={() => { setAdding(false); setInsertionPosition(null); setTieSource(tieSource ? '' : event?.id ?? '') }}
-          advanced={() => { setAdvanced(true); setTieSource(''); setAdding(false); setInsertionPosition(null) }} />
-        <MusicSheetViewer lyricScope={lyricScope} onLyricApply={applyDirectLyric} onLyricOwnerSelect={selectDirectLyricOwner} musicXml={showingTransposed ? transposed : review.musicXml} title={showingTransposed ? 'Transposed score' : 'Working score'} selection={showingTransposed ? null : selection} score={review.score} onSelect={showingTransposed ? undefined : selectEvent} tieTargetIds={showingTransposed ? null : tieTargetIds} interactive={!showingTransposed && !busy && !expired}
-          onPitchDrop={(id, pitch) => { if (!busy && !expired && !showingTransposed && !adding && !tieSource) void change(`events/${id}`, 'PATCH', { pitch }) }}
-          insertionMode={!showingTransposed && adding} insertionPosition={insertionPosition} onPositionSelect={(position) => {
-            if (busy || expired || showingTransposed) return
-            setInsertionPosition(position)
-            if (position) { setMeasureId(position.measureId); setPositionStaff(position.staff); setError('') }
-            else setError('No unique supported musical position here. Click inside an empty measure or near an existing note position; Advanced retains exact placement controls.')
-          }} />
-        {showingTransposed && <p>Read-only transposition of the verified corrected master. Switch to Corrected to edit.</p>}
-      </div>
-    </div>
-    {advanced && !showingTransposed && <h3>Advanced correction</h3>}
-    {advanced && !showingTransposed && <div className="review-fields">
+        </div>}
+
+    {(editorTool === 'note' || editorTool === 'more') && !showingTransposed && <div className="review-fields">
       <button disabled={busy || expired} onClick={() => { setAdding(!adding); setTieSource('') }}>Add at musical position</button>
       <label>Correction measure <select aria-label="Correction measure" disabled={busy} value={measure?.id ?? ''} onChange={(e) => { setMeasureId(e.target.value); setVoiceId(''); setEventId('-'); setPositionStaff(1); setTieSource('') }}>
         {measures.map(({ part, measure: m }) => <option key={m.id} value={m.id}>{part.name || 'Part'} · measure {m.number}</option>)}
@@ -341,14 +305,13 @@ export default function RecognitionReview({ review, onChange, onBusy, download, 
         {Array.from({ length: measure?.staves ?? 1 }, (_, i) => <option key={i + 1} value={i + 1}>Staff {i + 1}</option>)}
       </select></label>}
     </div>}
-    {advanced && !showingTransposed && adding && measure && <MusicalPositionEditor key={`position-${review.revision}-${measure.id}-${positionStaff}`} measure={measure} staff={positionStaff} voices={Array.from(new Set(['1', ...measure.voices.map((v) => v.id)]))} busy={busy || expired} change={change} />}
-    {advanced && !showingTransposed && event && measure && <VisualNoteEditor key={`visual-${review.revision}-${event.id}`} event={event} measure={measure} measures={measures.map(({ part, measure: m }) => ({ id: m.id, label: `${part.name || "Part"} · measure ${m.number}`, staves: m.staves }))}
+    {advanced && (editorTool === 'note' || editorTool === 'more') && !showingTransposed && adding && measure && <MusicalPositionEditor key={`position-${review.revision}-${measure.id}-${positionStaff}`} measure={measure} staff={positionStaff} voices={Array.from(new Set(['1', ...measure.voices.map((v) => v.id)]))} busy={busy || expired} change={change} />}
+    {(editorTool === 'note' || editorTool === 'more') && !showingTransposed && event && measure && <details><summary>More note properties</summary><VisualNoteEditor key={`visual-${review.revision}-${event.id}`} event={event} measure={measure} measures={measures.map(({ part, measure: m }) => ({ id: m.id, label: `${part.name || "Part"} · measure ${m.number}`, staves: m.staves }))}
       lyricOwner={lyricOwner} selectLyricOwner={selectLyricOwner}
       lyrics={review.score.lyrics.filter((lyric) => lyric.event_id === event.id)} busy={busy || expired} change={change}
-      startTie={() => setTieSource(event.id)} advanced={() => { setAdvanced(true); setTieSource(''); setAdding(false); setInsertionPosition(null) }} />}
+      startTie={() => setTieSource(event.id)} advanced={() => { setEditorTool('note'); setAdvanced(true); setTieSource(''); setAdding(false); setInsertionPosition(null) }} /></details>}
 
-    <div hidden={!advanced || showingTransposed} aria-label="Advanced correction">
-    <p className="review-hint">Select events below. The cursor marks measure/beat, with pitch, voice and staff identified in the inspector. OSMD’s mixed-size chord preview may differ from the original; per-note sizes and timing remain in the XML.</p>
+    <details hidden={(editorTool !== 'note' && editorTool !== 'tie' && editorTool !== 'more') || showingTransposed} aria-label="Advanced correction"><summary>{editorTool === 'tie' ? 'Tie endpoints and inserted-note ties' : 'Exact note properties and event navigation'}</summary>
     <div className="review-fields review-navigator">
       <label>Part / measure <select disabled={busy} value={measure?.id ?? ''} onChange={(e) => { setTieSource(''); setMeasureId(e.target.value); setVoiceId(''); setEventId('') }}>
         {measures.map(({ part, measure: m }) => <option key={m.id} value={m.id}>{part.name || part.id} · measure {m.number} ({m.validation_state})</option>)}
@@ -363,8 +326,8 @@ export default function RecognitionReview({ review, onChange, onBusy, download, 
     {measure && <p>Timing: {measure.actual_duration ?? '?'} / {measure.expected_duration ?? '?'} quarter beats. Divisions: {measure.divisions ?? '?'}. Staff count: {measure.staves}.</p>}
     {event && measure ? <EventInspector key={`${review.revision}-${event.id}`} event={event} measure={measure} tieTargets={tieTargets} busy={busy} change={change} />
       : measure && !measure.voices.some((v) => v.events.length) && <EmptyMeasureAdder key={`${review.revision}-${measure.id}`} measure={measure} busy={busy} change={change} />}
-    </div>
-    <details hidden={!advanced || showingTransposed}>
+    </details>
+    <details hidden={(editorTool !== 'more' && editorTool !== 'lyrics') || showingTransposed}>
       <summary>Title, lyrics and chord symbols</summary>
       <TextEditor key={`title-${review.revision}`} text={review.score.metadata.title} label="Score title" busy={busy}
         save={(text) => void change('metadata/title', 'PATCH', { text })} />
@@ -384,6 +347,49 @@ export default function RecognitionReview({ review, onChange, onBusy, download, 
         <HarmonyEditor key={`new-harmony-${review.revision}-${measure.id}`} measure={measure} busy={busy} change={change} />
       </>}
     </details>
+    {editorTool === 'more' && moreControls}
+  </div>
+
+  return <section className="status-card recognition-review">
+    {!resultOnly && <form id={`review-save-${review.id}`} onSubmit={event => { event.preventDefault(); void saveScore(false) }} />}
+    <p className="save-status" role="status">{busy ? 'Applying changes…' : saved ? `Saved: ${savedFile?.filename}` : 'Unsaved changes'}</p>
+    {saveMessage && (saved || pendingDownload?.revision === review.revision) && <p role="status">{saveMessage}</p>}
+    {pendingDownload && pendingDownload.reviewId === review.id && pendingDownload.revision === review.revision && <button disabled={busy} onClick={() => {
+      onSaved?.(pendingDownload); setPendingDownload(null)
+      setSaveMessage('You confirmed that the downloaded MusicXML file was saved locally.')
+    }}>I saved the downloaded file</button>}
+    {expired && <div role="alert" className="status-error">This editing session expired. Open your saved MusicXML to continue, or download an unvalidated recovery copy of the browser-held edits.
+      <button onClick={() => download(review.musicXml, 'unsaved-recovery.musicxml')}>Download recovery copy</button>
+    </div>}
+
+    <fieldset disabled={expired} className="visual-review-body">
+    <div className={resultOnly ? 'concert-result-editor' : 'review-comparison'}>
+      {!resultOnly && (savedFile && !review.source ? <div className="source-viewer musicxml-original">
+        <MusicSheetViewer musicXml={savedFile.blob} title="Original" interactive={false} />
+      </div> : <SourceViewer review={review} location={null} />)}
+      <div className="review-score">
+    {error && <div role="alert" className="status-error">{error}{!advanced && <details><summary>Show technical details</summary>{error}</details>}</div>}
+        <MusicSheetViewer headerActions={<>
+          <button aria-label="Undo" title="Undo" disabled={busy || expired || !review.can_undo} onClick={() => void change('undo', 'POST')}>↶</button>
+          <button aria-label="Redo" title="Redo" disabled={busy || expired || !review.can_redo} onClick={() => void change('redo', 'POST')}>↷</button>
+        </>} toolbar={<ScoreCorrectionToolbar tieTargets={tieTargets} group={editorTool} onGroup={group => { setEditorTool(group); setAdvanced(group === 'more') }} context={contextControls} key={`tools-${review.revision}-${event?.id ?? 'none'}-${adding}-${insertionPosition?.measureId ?? ''}-${insertionPosition?.staff ?? ''}`} review={review} event={event} measure={measure}
+          lyricOwner={lyricOwner} selectLyricOwner={selectLyricOwner}
+          anchorPosition={() => { if (event?.onset != null && event?.staff && measure) setInsertionPosition({ measureId: measure.id, onset: event.onset, staff: event.staff }) }}
+          position={insertionPosition} adding={adding} tying={!!tieSource} disabled={busy || expired} readOnly={showingTransposed} change={change}
+          select={() => { setAdding(false); setInsertionPosition(null); setTieSource('') }}
+          add={() => { setAdding(!adding); setInsertionPosition(null); setTieSource('') }}
+          tie={() => { setAdding(false); setInsertionPosition(null); setTieSource(tieSource ? '' : event?.id ?? '') }}
+          advanced={() => { setEditorTool('note'); setAdvanced(true); setTieSource(''); setAdding(false); setInsertionPosition(null) }} />} lyricScope={lyricScope} onLyricApply={applyDirectLyric} onLyricOwnerSelect={selectDirectLyricOwner} musicXml={showingTransposed ? transposed : review.musicXml} title="My Score" selection={showingTransposed ? null : selection} score={review.score} onSelect={showingTransposed ? undefined : selectEvent} tieTargetIds={showingTransposed ? null : tieTargetIds} interactive={!showingTransposed && !busy && !expired}
+          onPitchDrop={(id, pitch) => { if (!busy && !expired && !showingTransposed && !adding && !tieSource) void change(`events/${id}`, 'PATCH', { pitch }) }}
+          insertionMode={!showingTransposed && adding} insertionPosition={insertionPosition} onPositionSelect={(position) => {
+            if (busy || expired || showingTransposed) return
+            setInsertionPosition(position)
+            if (position) { setMeasureId(position.measureId); setPositionStaff(position.staff); setError('') }
+            else setError('No unique supported musical position here. Click inside an empty measure or near an existing note position; Advanced retains exact placement controls.')
+          }} />
+        {showingTransposed && <p>Read-only transposition of the verified corrected master. Switch to Corrected to edit.</p>}
+      </div>
+    </div>
     </fieldset>
   </section>
 }

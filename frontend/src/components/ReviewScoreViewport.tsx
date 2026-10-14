@@ -3,7 +3,7 @@ import { initialEngravingWidth } from '../utils/sourceEngraving'
 import { nextReviewZoom, reviewScale } from '../utils/reviewZoom'
 
 /** Keep engraving width independent of display zoom to preserve source grouping. */
-export default function ReviewScoreViewport({ sourceReview, children, engravingWidth = initialEngravingWidth }: { sourceReview: boolean; children: ReactNode; engravingWidth?: number }) {
+export default function ReviewScoreViewport({ sourceReview, children, engravingWidth = initialEngravingWidth, title, headerActions, toolbar }: { title?: string; headerActions?: ReactNode; toolbar?: ReactNode; sourceReview: boolean; children: ReactNode; engravingWidth?: number }) {
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const surfaceRef = useRef<HTMLDivElement | null>(null)
   const [zoom, setZoom] = useState<number | null>(null)
@@ -28,14 +28,27 @@ export default function ReviewScoreViewport({ sourceReview, children, engravingW
   }, [])
 
   const scale = reviewScale(zoom, size.pane, size.width)
+  const previousScale = useRef(scale)
+  useEffect(() => {
+    const viewport = viewportRef.current
+    if (viewport && previousScale.current > 0) {
+      const ratio = scale / previousScale.current
+      viewport.scrollLeft *= ratio
+      viewport.scrollTop *= ratio
+    }
+    previousScale.current = scale
+  }, [scale])
   return <div className="review-score-viewport">
-    <div className="review-toolbar" role="toolbar" aria-label="Score zoom">
+    <div className="score-panel-header" role="toolbar" aria-label="Score zoom">
+      {title && <h3>{title}</h3>}
+      {headerActions}
       <button aria-pressed={zoom === null} onClick={() => setZoom(null)}>Fit</button>
       <button aria-label="Zoom score out" disabled={scale <= .25} onClick={() => setZoom(nextReviewZoom(scale, -1))}>−</button>
-      <button aria-pressed={zoom === 100} onClick={() => setZoom(100)}>100%</button>
+      <button aria-label="Reset score zoom to 100%" aria-pressed={zoom === 100} onClick={() => setZoom(100)}>{Math.round(scale * 100)}%</button>
       <button aria-label="Zoom score in" disabled={scale >= 3} onClick={() => setZoom(nextReviewZoom(scale, 1))}>+</button>
-      <span role="status">{zoom === null ? 'Fit · ' : ''}{Math.round(scale * 100)}%</span>
+
     </div>
+    {toolbar}
     <div className="review-score-scroll" ref={viewportRef} aria-label="Score pane" tabIndex={0}>
       <div className="review-score-stage" style={{ width: size.width ? Math.ceil(size.width * scale) : '100%', height: Math.max(1, Math.ceil(size.height * scale)) }}>
         <div className="review-score-surface" ref={surfaceRef} style={{ width: sourceReview ? engravingWidth || 'max-content' : size.pane || '100%', transform: `scale(${scale})` }}>

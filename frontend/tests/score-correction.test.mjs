@@ -17,7 +17,7 @@ const plain = value => JSON.parse(JSON.stringify(value))
 function find(tree, predicate) {
   if (!tree || typeof tree !== 'object') return null
   if (predicate(tree)) return tree
-  for (const child of [tree.props?.children].flat(Infinity)) { const result = find(child, predicate); if (result) return result }
+  for (const child of [tree.props?.children, tree.props?.headerActions, tree.props?.toolbar, tree.props?.context, tree.props?.moreControls].flat(Infinity)) { const result = find(child, predicate); if (result) return result }
   return null
 }
 function harness(path, props, dependencies = {}) {
@@ -40,20 +40,25 @@ const score = { parts: [{ id: 'p', measures: [measure] }], lyrics: [], harmonies
 const review = { id: 'review', revision: 1, state: 'DRAFT', expires_at: 9999999999, score, can_undo: true, can_redo: true, review_issues: [], validation: { diagnostics: [], unresolved_issue_count: 0, error_count: 0, warning_count: 0 } }
 function toolbar(overrides = {}) {
   const calls = []; const actions = []
-  const props = { review, event: note, measure, position: null, adding: false, tying: false, disabled: false, readOnly: false,
+  const props = { group: 'note', review, event: note, measure, position: null, adding: false, tying: false, disabled: false, readOnly: false,
     change: async (...args) => calls.push(args), select: () => actions.push('select'), add: () => actions.push('add'), tie: () => actions.push('tie'), advanced: () => actions.push('advanced'), ...overrides }
-  return { ...harness('../src/components/ScoreCorrectionToolbar.tsx', props), calls, actions, props }
+  props.onGroup = group => { props.group = group }
+  const view = harness('../src/components/ScoreCorrectionToolbar.tsx', props)
+  let current = props
+  return { render(next = current) { current = next; return view.render(next) }, calls, actions, props }
 }
 
-test('toolbar has labeled icon actions and disables unrelated edits without selection', () => {
-  const view = toolbar({ event: undefined }); const tree = view.render()
-  for (const label of ['Select', 'Add note', 'Delete selected notation', 'Pitch', 'Duration', 'Accidental', 'Normal / Small', 'Duration-bearing / Grace', 'Tie', 'Lyric', 'Undo', 'Redo', 'More / Advanced']) {
-    const action = button(tree, label); assert.ok(action); assert.equal(action.props.title, label)
-  }
-  assert.equal(button(tree, 'Select').props.disabled, false)
-  assert.equal(button(tree, 'Add note').props.disabled, false)
-  for (const label of ['Delete selected notation', 'Pitch', 'Duration', 'Accidental', 'Normal / Small', 'Duration-bearing / Grace', 'Tie', 'Lyric']) assert.equal(button(tree, label).props.disabled, true)
-  button(tree, 'Add note').props.onClick(); assert.deepEqual(view.actions, ['add'])
+test('toolbar exposes five persistent groups and contextual Note actions preserve selection gating', () => {
+  const view = toolbar({ event: undefined, group: 'select' })
+  for (const label of ['Select', 'Note', 'Lyrics', 'Tie', 'More']) assert.ok(button(view.render(), label))
+  assert.equal(button(view.render(), 'Add note'), null)
+  button(view.render(), 'Note').props.onClick()
+  assert.ok(button(view.render(), 'Add note'))
+  assert.equal(button(view.render(), 'Add note').props.disabled, false)
+  for (const label of ['Delete selected notation', 'Pitch', 'Duration', 'Accidental', 'Normal / Small', 'Duration-bearing / Grace']) assert.equal(button(view.render(), label), null)
+  button(view.render(), 'Add note').props.onClick(); assert.deepEqual(view.actions, ['select', 'add'])
+  view.render({ ...view.props, event: note })
+  for (const label of ['Delete selected notation', 'Pitch', 'Duration', 'Accidental', 'Normal / Small', 'Duration-bearing / Grace']) assert.ok(button(view.render(), label))
 })
 
 test('contextual pitch duration accidental size timing delete and history use existing commands', () => {
@@ -78,8 +83,8 @@ test('contextual pitch duration accidental size timing delete and history use ex
   assert.deepEqual(plain(view.calls[4]), ['events/a', 'PATCH', { grace: true }])
   button(view.render(), 'Delete selected notation').props.onClick()
   assert.deepEqual(plain(view.calls[5]), ['events/a', 'DELETE'])
-  button(view.render(), 'Undo').props.onClick(); button(view.render(), 'Redo').props.onClick()
-  assert.deepEqual(plain(view.calls.slice(6)), [['undo', 'POST'], ['redo', 'POST']])
+  // History remains in the panel header and is exercised by review-selection/visual-review tests.
+  assert.equal(button(view.render(), 'Undo'), null)
 })
 
 test('Add consumes visual position with C5 Half Small duration-bearing; no offset input', () => {
@@ -87,7 +92,7 @@ test('Add consumes visual position with C5 Half Small duration-bearing; no offse
   const view = toolbar({ adding: true, position })
   let tree = view.render()
   assert.equal(button(tree, 'Add note').props['aria-pressed'], true)
-  assert.equal(button(tree, 'Pitch').props.disabled, true)
+  assert.equal(button(tree, 'Pitch'), null)
   for (const [label, value] of [['Note pitch','C'], ['Note octave','5'], ['New note size','small'], ['New note voice','secondary']]) field(view.render(), label).props.onChange({ target: { value } })
   button(view.render(), 'Half note').props.onClick()
   tree = view.render()
@@ -108,19 +113,19 @@ test('ambiguous voice requires a musical choice and does not guess ownership', (
 })
 
 test('tie mode and removal are explicit, lyrics and Advanced remain accessible', () => {
-  const view = toolbar({ tying: true, event: { ...note, tie_target_id: 'next' } })
+  const view = toolbar({ group: 'tie', tying: true, event: { ...note, tie_target_id: 'next' } })
   assert.equal(button(view.render(), 'Cancel tie').props['aria-pressed'], true)
   button(view.render(), 'Cancel tie').props.onClick(); assert.deepEqual(view.actions, ['tie'])
   button(view.render(), 'Remove tie').props.onClick()
   assert.deepEqual(plain(view.calls[0]), ['events/a', 'PATCH', { tie_to_event_id: null }])
-  const normal = toolbar(); button(normal.render(), 'Lyric').props.onClick()
+  const normal = toolbar(); button(normal.render(), 'Lyrics').props.onClick()
   assert.ok(find(normal.render(), e => e.type === './VisualNoteEditor' || e.props?.lyrics))
-  button(normal.render(), 'More / Advanced').props.onClick(); assert.deepEqual(normal.actions, ['advanced'])
+  button(normal.render(), 'More').props.onClick(); assert.equal(normal.props.group, 'more')
 })
 
 test('visible Tie Up and Tie Down use only direction PATCH and reflect canonical state', () => {
   const selected = { ...note, tie_target_id: 'next', tie_direction_editable: true, tie_direction: 'up' }
-  const view = toolbar({ event: selected })
+  const view = toolbar({ group: 'tie', event: selected })
   assert.equal(button(view.render(), 'Tie Up').props['aria-pressed'], true)
   for (const [label, direction] of [['Tie Down', 'down'], ['Tie Up', 'up']]) {
     button(view.render(), label).props.onClick()
@@ -136,7 +141,7 @@ test('visible Tie Up and Tie Down use only direction PATCH and reflect canonical
 
 test('direction buttons stay visible without eligibility metadata and defer identity validation to backend', () => {
   for (const eligibility of [undefined, false, true]) {
-    const view = toolbar({ event: { ...note, tie_target_id: 'next', tie_direction_editable: eligibility } })
+    const view = toolbar({ group: 'tie', event: { ...note, tie_target_id: 'next', tie_direction_editable: eligibility } })
     for (const label of ['Tie Up', 'Tie Down']) {
       const control = button(view.render(), label)
       assert.equal(control.props.disabled, false)
@@ -148,8 +153,11 @@ test('direction buttons stay visible without eligibility metadata and defer iden
   }
   for (const props of [{ event: undefined }, { event: { ...note, kind: 'rest', pitch: null } },
     { adding: true }, { tying: true }, { disabled: true }, { readOnly: true }]) {
-    const tree = toolbar(props).render()
-    for (const label of ['Tie Up', 'Tie Down']) assert.equal(button(tree, label).props.disabled, true)
+    const tree = toolbar({ ...props, group: 'tie' }).render()
+    for (const label of ['Tie Up', 'Tie Down']) {
+      if ('event' in props) assert.equal(button(tree, label), null)
+      else assert.equal(button(tree, label).props.disabled, true)
+    }
   }
   assert.equal(field(toolbar().render(), 'Temporary tie toolbar diagnostic'), null)
 })
@@ -157,7 +165,7 @@ test('direction buttons stay visible without eligibility metadata and defer iden
 test('Transposed and busy states disable mutations and hide corrected-property popovers', () => {
   const view = toolbar(); button(view.render(), 'Pitch').props.onClick()
   const tree = view.render({ ...view.props, readOnly: true })
-  for (const label of ['Add note', 'Delete selected notation', 'Pitch', 'Duration', 'Accidental', 'Normal / Small', 'Duration-bearing / Grace', 'Tie', 'Lyric', 'Undo', 'Redo', 'More / Advanced']) assert.equal(button(tree, label).props.disabled, true)
+  for (const label of ['Add note', 'Delete selected notation', 'Pitch', 'Duration', 'Accidental', 'Normal / Small', 'Duration-bearing / Grace', 'Tie', 'Lyrics', 'More']) assert.equal(button(tree, label).props.disabled, true)
   assert.equal(field(tree, 'Note pitch'), null)
   assert.equal(button(toolbar({ disabled: true }).render(), 'Select').props.disabled, true)
 })
@@ -276,7 +284,7 @@ test('viewer click connects real page wrapper geometry to marker, suppresses not
     '../utils/scoreInsertion':adapters,
     '../utils/visualReview':helpers,
   },{console,DOMParser:class{parseFromString(){return {}}},ResizeObserver:class{observe(){}disconnect(){}}})
-  const blob={text:async()=>'<score-partwise/>'};const container={innerHTML:'',clientWidth:1000,style:{}}
+  const blob={text:async()=>'<score-partwise/>'};const container={innerHTML:'',clientWidth:1000,offsetWidth:1000,style:{}}
   const onSelect=id=>selections.push(id),onPositionSelect=p=>hits.push(p)
   function render(mode=true,position=null,interactive=true){
     slot=0
@@ -472,4 +480,51 @@ test('add-note exact anchor is explicit and retains duration, size and voice cho
   assert.equal(body.duration,'1/2')
   assert.equal(body.display_size,'small')
   assert.equal(body.grace,false)
+})
+
+test('UX-01 tool groups reveal only their contextual operations without mutating the score', () => {
+  const view = toolbar({ group: 'select', event: { ...note, tie_target_id: 'next', tie_direction: 'down' } })
+  assert.equal(button(view.render(), 'Pitch'), null)
+  assert.equal(button(view.render(), 'Tie Up'), null)
+  button(view.render(), 'Note').props.onClick()
+  assert.ok(button(view.render(), 'Pitch'))
+  assert.ok(button(view.render(), 'Add note'))
+  assert.equal(button(view.render(), 'Tie Up'), null)
+  button(view.render(), 'Lyrics').props.onClick()
+  assert.ok(find(view.render(), node => node.props?.lyrics))
+  assert.equal(button(view.render(), 'Pitch'), null)
+  button(view.render(), 'Tie').props.onClick()
+  assert.ok(button(view.render(), 'Tie Up'))
+  assert.ok(button(view.render(), 'Tie Down'))
+  assert.ok(button(view.render(), 'Remove tie'))
+  assert.ok(field(view.render(), 'Tie destination'))
+  assert.equal(button(view.render(), 'Pitch'), null)
+  button(view.render(), 'More').props.onClick()
+  assert.equal(button(view.render(), 'Tie Up'), null)
+  assert.equal(view.calls.length, 0)
+})
+
+test('UX-01 editor supplies history in header, contextual tools beside the score, and preserves active group after edits', async () => {
+  let current = review
+  const calls = []
+  const view = harness('../src/components/RecognitionReview.tsx', {}, {
+    '../services/api': { changeReview: async (r, ...args) => { calls.push(args); return { ...r, revision: r.revision + 1 } } },
+  })
+  const render = () => view.render({ review: current, onChange: value => { current = value }, onBusy() {}, download() {} })
+  const pane = () => find(render(), node => node.type === './MusicSheetViewer')
+  const tools = () => pane().props.toolbar
+  assert.equal(pane().props.title, 'My Score')
+  assert.ok(button(pane().props.headerActions, 'Undo'))
+  assert.ok(button(pane().props.headerActions, 'Redo'))
+  assert.equal(tools().props.group, 'select')
+  pane().props.onSelect('a')
+  tools().props.onGroup('note')
+  await tools().props.change('events/a', 'PATCH', { display_size: 'small' })
+  assert.equal(tools().props.group, 'note')
+  assert.deepEqual(plain(calls), [['events/a', 'PATCH', { display_size: 'small' }]])
+  tools().props.onGroup('lyrics')
+  assert.equal(tools().props.group, 'lyrics')
+  assert.equal(find(tools().props.context, node => node.props?.className === 'review-validation').props.hidden, true)
+  tools().props.onGroup('more')
+  assert.equal(find(tools().props.context, node => node.props?.className === 'review-validation').props.hidden, false)
 })

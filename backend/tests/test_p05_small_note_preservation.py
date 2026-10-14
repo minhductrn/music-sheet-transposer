@@ -13,7 +13,7 @@ from app.music.review.service import ReviewService
 from app.music.review.storage import MemoryReviewStore
 from test_semantic_recovery import archive, XML as SYNTHETIC_XML
 
-RAW = (Path(__file__).parent / 'music/fixtures/p05_benchmark_raw.musicxml').read_bytes()
+RAW = (Path(__file__).parent / 'music/fixtures/p05_synthetic_preservation.musicxml').read_bytes()
 
 
 def events(score):

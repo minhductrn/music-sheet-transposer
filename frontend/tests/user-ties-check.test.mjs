@@ -17,7 +17,7 @@ function harness(path,initial,dependencies={}) {
   const component=load(path,{react,'react/jsx-runtime':{jsx,jsxs:jsx},'../utils/visualReview':utils,'../utils/review':{eventLabel:e=>e.id,validDuration:()=>true},...dependencies}).default
   return{render(next=props){props=next;slot=0;return component(props)}}
 }
-function find(tree,match){if(!tree||typeof tree!=='object')return null;if(match(tree))return tree;for(const child of [tree.props?.children].flat(Infinity)){const r=find(child,match);if(r)return r}return null}
+function find(tree,match){if(!tree||typeof tree!=='object')return null;if(match(tree))return tree;for(const child of [tree.props?.children, tree.props?.headerActions, tree.props?.toolbar, tree.props?.context, tree.props?.moreControls].flat(Infinity)){const r=find(child,match);if(r)return r}return null}
 const button=(tree,label)=>find(tree,e=>e.type==='button'&&(e.props.children===label||e.props['aria-label']===label))
 const child=(tree,name)=>find(tree,e=>e.type===name)
 const plain=v=>JSON.parse(JSON.stringify(v))
@@ -54,15 +54,15 @@ test('Cancel tie makes no edit; unsafe/unlisted target cannot substitute an endp
 test('Tie toolbar eligibility uses backend technical capabilities, independent of music warnings',()=>{
   const calls=[]
   const props={review,event:note,measure,position:null,adding:false,tying:false,disabled:false,readOnly:false,change:async(...args)=>calls.push(plain(args)),select(){},add(){},tie(){calls.push('tie')},advanced(){}}
-  const h=harness('../src/components/ScoreCorrectionToolbar.tsx',props)
-  assert.equal(button(h.render(),'Tie').props.disabled,false)
-  button(h.render(),'Tie').props.onClick();assert.deepEqual(calls,['tie'])
+  const h=harness('../src/components/ScoreCorrectionToolbar.tsx',{...props,group:'tie'})
+  assert.equal(button(h.render(),'Add tie').props.disabled,false)
+  button(h.render(),'Add tie').props.onClick();assert.deepEqual(calls,['tie'])
   const unsafe={...props,event:{...note,tie_correction_error:'Distinct tie markings cannot be selected safely.',tie_target_ids:[]}}
-  assert.equal(button(h.render(unsafe),'Tie').props.disabled,false)
+  assert.equal(button(h.render({...unsafe,group:'tie'}),'Add tie').props.disabled,false)
   assert.ok(find(h.render(),e=>e.type==='p'&&String(e.props.children).includes('Distinct tie markings')))
 })
 test('Remove tie sends only explicit null; cancel stays available for a source without candidates',()=>{
-  const calls=[];const h=harness('../src/components/ScoreCorrectionToolbar.tsx',{review,event:{...note,tie_target_id:'chosen',tie_target_ids:[]},measure,position:null,adding:false,tying:true,disabled:false,readOnly:false,change:async(...args)=>calls.push(plain(args)),select(){},add(){},tie(){},advanced(){}})
+  const calls=[];const h=harness('../src/components/ScoreCorrectionToolbar.tsx',{group:'tie',review,event:{...note,tie_target_id:'chosen',tie_target_ids:[]},measure,position:null,adding:false,tying:true,disabled:false,readOnly:false,change:async(...args)=>calls.push(plain(args)),select(){},add(){},tie(){},advanced(){}})
   assert.equal(button(h.render(),'Cancel tie').props.disabled,false)
   button(h.render(),'Remove tie').props.onClick()
   assert.deepEqual(calls,[['events/source','PATCH',{tie_to_event_id:null}]])
@@ -116,7 +116,7 @@ test('Check score API sends current revision and returns a check result without 
 
 test('browser regression: real note can start Tie without precomputed candidates or despite raw-markup errors',()=>{
   const props={review,event:{...note,tie_target_ids:[],tie_correction_error:'This endpoint has distinct tie markings'},measure,position:null,adding:false,tying:false,disabled:false,readOnly:false,change:async()=>{},select(){},add(){},tie(){},advanced(){}}
-  assert.equal(button(harness('../src/components/ScoreCorrectionToolbar.tsx',props).render(),'Tie').props.disabled,false)
+  assert.equal(button(harness('../src/components/ScoreCorrectionToolbar.tsx',{...props,group:'tie'}).render(),'Add tie').props.disabled,false)
 })
 test('browser regression: next selected real note is authoritative even when absent from candidate list',async()=>{
   const source={...note,tie_target_ids:[]}
@@ -131,8 +131,8 @@ test('browser regression: next selected real note is authoritative even when abs
 
 test('genuine backend technical source limitation disables Tie with its exact reason',()=>{
   const props={review,event:{...note,tie_source_editable:false,tie_correction_error:'A tie endpoint needs exactly one pitched MusicXML note.'},measure,position:null,adding:false,tying:false,disabled:false,readOnly:false,change:async()=>{},select(){},add(){},tie(){},advanced(){}}
-  const tree=harness('../src/components/ScoreCorrectionToolbar.tsx',props).render()
-  assert.equal(button(tree,'Tie').props.disabled,true)
+  const tree=harness('../src/components/ScoreCorrectionToolbar.tsx',{...props,group:'tie'}).render()
+  assert.equal(button(tree,'Add tie').props.disabled,true)
   assert.ok(find(tree,e=>e.type==='p'&&e.props.children===props.event.tie_correction_error))
 })
 test('canonical repeated correction success leaves verification and transposed lifecycle untouched',async()=>{

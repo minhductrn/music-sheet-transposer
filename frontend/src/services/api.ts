@@ -146,3 +146,28 @@ export async function transposeVerifiedReview(review: ReviewSession, semitones: 
     body: JSON.stringify({ semitones }),
   }))).blob()
 }
+
+export interface ConcertKey { fifths: number; mode: 'major' | 'minor' }
+export interface ConcertKeyDetection {
+  fifths: number
+  mode: ConcertKey['mode'] | null
+  candidates: ConcertKey[]
+  suggested: ConcertKey | null
+}
+
+export async function getConcertKey(blob: Blob): Promise<ConcertKeyDetection> {
+  const form = new FormData()
+  form.append('file', blob, 'concert.musicxml')
+  return (await checkResponse(await fetch(`${API_BASE_PATH}/concert-key`, { method: 'POST', body: form }))).json()
+}
+
+export async function transposeConcertKey(blob: Blob, fifths: number, direction: 'up' | 'down', sourceKey: ConcertKey): Promise<Blob> {
+  const form = new FormData()
+  form.append('file', blob, 'concert.musicxml')
+  form.append('target_fifths', String(fifths))
+  form.append('direction', direction)
+  form.append('source_fifths', String(sourceKey.fifths))
+  form.append('source_mode', sourceKey.mode)
+  form.append('source_confirmed', 'true')
+  return (await checkResponse(await fetch(`${API_BASE_PATH}/transpose/concert-key`, { method: 'POST', body: form }))).blob()
+}
