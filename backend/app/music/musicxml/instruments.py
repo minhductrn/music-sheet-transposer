@@ -25,7 +25,8 @@ def instrument_score(contents: bytes, instrument: str, direction: str = "up") ->
     offset, diatonic, chromatic, octave, name, program = INSTRUMENTS[instrument]
     if direction not in ('up','down'): raise MusicXMLTranspositionError('Choose Up or Down.')
     standard_offset=offset
-    offset=offset if direction=='up' else offset%12-12
+    # Down is exactly one octave below the standard written part, including Tenor.
+    offset=offset if direction=='up' else offset-12
     written_diatonic=-diatonic-7*octave-7*((standard_offset-offset)//12)
     transposed = transpose_musicxml_document(contents, offset)
     with _document(transposed) as dom:

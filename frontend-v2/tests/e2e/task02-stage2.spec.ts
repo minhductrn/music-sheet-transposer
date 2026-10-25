@@ -32,7 +32,7 @@ test('Stage2 busy operation locks navigation, output switches and exports until 
  let release!:()=>void;const wait=new Promise<void>(resolve=>release=resolve);
  await page.route('**/api/v1/reviews/*/events/e-2',async route=>{await wait;await route.continue();});
  await editor.getByRole('button',{name:'Small',exact:true}).click();
- for(const name of ['← Concert Score','Open MusicXML','Demo workspace','Export instrument MusicXML'])await expect(page.getByRole('button',{name,exact:true})).toBeDisabled();
+ for(const name of ['← Concert Score','Open MusicXML','Home','Export instrument MusicXML'])await expect(page.getByRole('button',{name,exact:true})).toBeDisabled();
  await expect(page.getByRole('button',{name:/Soprano Saxophone/})).toBeDisabled();release();
  await expect(editor.getByRole('button',{name:'Save',exact:true})).toBeEnabled();await page.getByRole('button',{name:/Soprano Saxophone/}).click();await expect(editor.locator('.workspace-heading strong')).toContainText('Soprano');await expect(editor.getByRole('button',{name:'Save',exact:true})).toBeEnabled();await page.getByRole('button',{name:/Alto Saxophone/}).click();await expect(editor.locator('.workspace-heading strong')).toContainText('Alto');await expect(editor.getByRole('button',{name:'Save',exact:true})).toBeEnabled();
  d=page.waitForEvent('download');await editor.getByRole('button',{name:'Save',exact:true}).click();const xml=await readFile((await(await d).path())!,'utf8');expect(xml).toContain('small');await page.getByRole('button',{name:'I retained the downloaded file'}).click();await expect(page.getByRole('button',{name:'← Concert Score'})).toBeEnabled();

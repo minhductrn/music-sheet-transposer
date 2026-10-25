@@ -15,3 +15,7 @@
 .instrument-editor .compare-layout>.source-pane,.instrument-editor .compare-layout>.working-pane{margin:0}
 
 .accidental-buttons{display:inline-flex;gap:4px;align-items:center}.accidental-buttons button{min-width:36px}.accidental-buttons span{font:26px 'DejaVu Serif','Liberation Serif',serif;line-height:1}
+
+.home-prompt{max-height:calc(100vh - 120px);overflow-y:auto}
+
+.workspace-brand{display:flex;align-items:center;gap:12px;min-width:0}.workspace-brand .brand{min-width:0}.home-navigation button{display:inline-flex;align-items:center;gap:6px;min-height:40px;white-space:nowrap}.home-navigation svg{flex-shrink:0}.instrument-editor-header .workspace-brand{display:none}

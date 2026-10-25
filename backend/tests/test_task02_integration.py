@@ -147,7 +147,7 @@ def test_imported_slur_orientation_and_explicit_direction_remain_consistent():
 @pytest.mark.parametrize('instrument',list(INSTRUMENTS))
 def test_instrument_down_is_equivalent_key_lower_register_without_changing_concert(instrument):
     offset=INSTRUMENTS[instrument][0];up=instrument_score(XML,instrument);down=instrument_score(XML,instrument,'down')
-    assert midi(down)==[p+offset%12-12 for p in midi(XML)]
+    assert midi(down)==[p+{'alto':-3,'soprano':-10,'tenor':2}[instrument] for p in midi(XML)]
     assert ET.fromstring(up).findtext('.//key/fifths')==ET.fromstring(down).findtext('.//key/fifths')
     assert ET.tostring(ET.fromstring(up).find('.//transpose'))==ET.tostring(ET.fromstring(down).find('.//transpose'))
     assert XML.find(b'<transpose>')==-1
@@ -205,3 +205,46 @@ def test_instrument_down_refuses_out_of_range_pitch_without_mutation():
     xml=XML.replace(b'<step>F</step><octave>4',b'<step>C</step><octave>0',1)
     with pytest.raises(MusicXMLTranspositionError,match='octave range'):instrument_score(xml,'alto','down')
     assert b'<step>C</step><octave>0' in xml
+
+
+def test_tenor_lower_written_register_matches_soprano_but_keeps_tenor_sound_identity():
+    source=XML.replace(b'<note><pitch><step>F', b'<harmony><root><root-step>F</root-step></root><kind>major</kind><bass><bass-step>C</bass-step></bass></harmony><note id="keep-note"><pitch><step>F',1)
+    soprano=instrument_score(source,'soprano','up')
+    tenor=instrument_score(source,'tenor','down')
+    standard=instrument_score(source,'tenor','up')
+    assert midi(tenor)==midi(soprano)==[p+2 for p in midi(source)]
+    assert midi(standard)==[p+12 for p in midi(tenor)]
+    st,tt=ET.fromstring(soprano),ET.fromstring(tenor)
+    for tag in ['pitch','key','harmony','duration','voice','staff','lyric','time','backup']:
+        assert [ET.tostring(n) for n in tt.iter(tag)]==[ET.tostring(n) for n in st.iter(tag)]
+    assert tt.findtext('.//part-name')=='Tenor Saxophone'
+    assert tt.findtext('.//midi-program')=='67'
+    assert tt.findtext('.//transpose/chromatic')=='-2'
+    assert tt.findtext('.//transpose/octave-change')=='-1'
+    assert st.find('.//transpose/octave-change') is None
+    assert tt.find('.//note').get('id')=='keep-note'
+    # Same written pitches, but the real Tenor sounds an octave below Concert.
+    assert [p-14 for p in midi(tenor)]==[p-12 for p in midi(source)]
+    assert b'<transpose>' not in source
+    reopened=service().create(tenor)
+    assert reopened['score']['parts'][0]['name']=='Tenor Saxophone'
+
+
+def test_tenor_down_endpoint_is_major_second_written_with_major_ninth_metadata(setup_review):
+    client,_,_=setup_review
+    response=client.post('/api/v1/transpose/instrument',data={'instrument':'tenor','direction':'down'},files={'file':('concert.musicxml',XML)})
+    assert response.status_code==200
+    assert midi(response.content)==[p+2 for p in midi(XML)]
+    assert ET.fromstring(response.content).findtext('.//transpose/octave-change')=='-1'
+
+
+def test_po_sample_tenor_readable_register_preserves_every_lyric_tie_and_note_identity():
+    path=os.environ.get('AI_SDF_TASK02_SAMPLE')
+    if not path:pytest.skip('Private local sample only')
+    raw=Path(path).read_bytes();tenor=instrument_score(raw,'tenor','down');soprano=instrument_score(raw,'soprano','up')
+    assert midi(tenor)==midi(soprano)==[p+2 for p in midi(raw)]
+    before,after=ET.fromstring(raw),ET.fromstring(tenor)
+    for tag in ['duration','voice','staff','tie','tied','slur','lyric','time','backup','forward','time-modification']:
+        assert [ET.tostring(n) for n in before.iter(tag)]==[ET.tostring(n) for n in after.iter(tag)]
+    assert [n.get('id') for n in before.iter('note')]==[n.get('id') for n in after.iter('note')]
+    assert Path(path).read_bytes()==raw
