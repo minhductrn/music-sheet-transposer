@@ -87,3 +87,25 @@ async def transpose_musicxml(
                 'attachment; filename="transposed.musicxml"'
         },
     )
+
+
+@router.post("/transpose/instrument")
+async def transpose_instrument_musicxml(
+    instrument: Annotated[Literal["alto", "soprano", "tenor"], Form()],
+    direction: Annotated[Literal["up", "down"], Form()] = "up",
+    file: UploadFile = File(...),
+) -> Response:
+    from app.music.musicxml.instruments import instrument_score
+    from app.music.review.document import ReviewError
+    from app.core.config import settings
+    try:
+        contents = await file.read(settings.recognition_max_output_bytes + 1)
+        if len(contents) > settings.recognition_max_output_bytes:
+            raise HTTPException(413, "The score exceeds the MusicXML size limit.")
+        output = await run_in_threadpool(instrument_score, contents, instrument, direction)
+        return Response(output, media_type="application/vnd.recordare.musicxml+xml",
+                        headers={"Content-Disposition": f'attachment; filename="{instrument}-sax.musicxml"'})
+    except (MusicXMLTranspositionError, ReviewError) as error:
+        raise HTTPException(422, detail=str(error)) from error
+    finally:
+        await file.close()

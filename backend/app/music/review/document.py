@@ -63,7 +63,8 @@ class Document:
         if local(root.tag) != "score-partwise" or not any(local(p.tag) == "part" for p in root):
             raise ReviewError("Reviews require score-partwise MusicXML with parts.")
         refs, counts = {}, {}
-        roles = {"part": "p", "measure": "m", "note": "e", "lyric": "l", "harmony": "h", "credit-words": "c"}
+        roles = {"part": "p", "measure": "m", "note": "e", "lyric": "l", "harmony": "h", "credit-words": "c",
+                 "work-title": "wt", "movement-title": "mt", "creator": "cr", "words": "w"}
         for element in root.iter():
             prefix = roles.get(local(element.tag))
             if prefix:

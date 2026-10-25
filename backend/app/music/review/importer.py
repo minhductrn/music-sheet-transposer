@@ -70,6 +70,7 @@ def import_score(doc: Document) -> tuple[EditableScore, list[Diagnostic]]:
             position, extent, previous = Fraction(0), Fraction(0), None
             timing_known = True
             voices = {}
+            forwards = []
             expected = None
 
             def meter_duration():
@@ -125,6 +126,8 @@ def import_score(doc: Document) -> tuple[EditableScore, list[Diagnostic]]:
                         timing_known = False
                         issue("invalid_timing", "Backup/forward needs positive duration and divisions.", measure_id=mid)
                     elif position is not None:
+                        if tag == "forward" and doc.text(element, "voice") and integer(doc.text(element, "staff")) in range(1, staves + 1):
+                            forwards.append((position, position + duration / divisions, doc.text(element, "voice"), integer(doc.text(element, "staff"))))
                         position += duration / divisions * (1 if tag == "forward" else -1)
                         extent = max(extent, position)
                         if position < 0:
@@ -211,6 +214,21 @@ def import_score(doc: Document) -> tuple[EditableScore, list[Diagnostic]]:
             measures.append(Measure(mid, measure.get("number", ""), index, str(divisions) if divisions else None,
                                     time, keys, staves, str(expected) if expected is not None else None,
                                     str(extent) if timing_known else None, "VALID", list(voices.values())))
+            # Only explicit, owned forward spans are insertion candidates. Never
+            # infer missing music from meter. Subtract notes already filling a span.
+            if timing_known:
+                gaps = []
+                for start, end, owner, staff in forwards:
+                    intervals = [(start, end)]
+                    for event in events:
+                        if event.voice != owner or event.grace or event.onset is None or event.duration is None:
+                            continue
+                        a, b = Fraction(event.onset), Fraction(event.onset) + Fraction(event.duration)
+                        intervals = [(left, right) for lo, hi in intervals for left, right in
+                                     ((lo, min(hi, a)), (max(lo, b), hi)) if left < right]
+                    gaps.extend({'onset': str(lo), 'duration': str(hi - lo), 'voice': owner, 'staff': staff}
+                                for lo, hi in intervals if lo >= 0)
+                measures[-1].insertion_gaps = [dict(items) for items in dict.fromkeys(tuple(gap.items()) for gap in gaps)]
         if not measures:
             issue("missing_measures", "A part contains no measures.")
         parts.append(Part(ids[part], part_names.get(part_xml_id, part_xml_id), measures))
@@ -225,4 +243,7 @@ def import_score(doc: Document) -> tuple[EditableScore, list[Diagnostic]]:
                 "musicxml_version": doc.root.get("version", "")}
     issues.append(Diagnostic("source_comparison", "Structural checks do not establish recognition accuracy. Compare every correction with the source.", "INFO"))
     from .structure import project_structure
-    return project_structure(doc, EditableScore(metadata, parts, lyrics, harmonies)), issues
+    score = project_structure(doc, EditableScore(metadata, parts, lyrics, harmonies))
+    from .score_text import project_texts
+    score.texts = project_texts(doc)
+    return score, issues

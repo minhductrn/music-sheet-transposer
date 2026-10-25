@@ -10,7 +10,7 @@ from starlette.concurrency import run_in_threadpool
 from app.core.config import settings
 from app.music.review.document import ReviewError
 from app.music.review.models import (
-    EventAdd, EventMove, EventPatch, HarmonyAdd, HarmonyPatch, LyricAdd, ReviewTranspose, SourceConfirmation, TextPatch, VerifyRequest,
+    SlurEdit, TripletReplacement, TripletSelection, TripletEdit, EventAdd, EventMove, EventPatch, HarmonyAdd, HarmonyPatch, LyricAdd, LyricMove, ReviewTranspose, ScoreTextAdd, SourceConfirmation, TextPatch, VerifyRequest,
 )
 from app.music.review.service import ReviewService
 from app.music.review.storage import MemoryReviewStore
@@ -94,6 +94,37 @@ async def update_event(review_id: str, event_id: str, patch: EventPatch,
     return await response(await call(service.event_patch, review_id, revision, event_id, patch))
 
 
+@router.post("/{review_id}/events/{event_id}/triplet-replacement/options")
+async def replacement_options(review_id: str, event_id: str, revision: int = Depends(expected_revision),
+                               service: ReviewService = Depends(get_review_service)):
+    return JSONResponse(await call(service.replacement_options, review_id, revision, event_id), headers={"Cache-Control": "no-store"})
+
+
+@router.post("/{review_id}/events/{event_id}/triplet-replacement/preview")
+async def replacement_preview(review_id: str, event_id: str, request: TripletReplacement, revision: int = Depends(expected_revision),
+                               service: ReviewService = Depends(get_review_service)):
+    return JSONResponse(await call(service.replacement_preview, review_id, revision, event_id, request), headers={"Cache-Control": "no-store"})
+
+
+@router.post("/{review_id}/events/{event_id}/replace-triplet")
+async def replace_triplet(review_id: str, event_id: str, request: TripletReplacement, revision: int = Depends(expected_revision),
+                           service: ReviewService = Depends(get_review_service)):
+    return await response(await call(service.triplet_replace, review_id, revision, event_id, request))
+
+
+@router.post("/{review_id}/triplets/preview")
+async def preview_triplet(review_id: str, request: TripletSelection, revision: int = Depends(expected_revision),
+                          service: ReviewService = Depends(get_review_service)):
+    payload = await call(service.triplet_preview, review_id, revision, request)
+    return JSONResponse(payload, headers={"Cache-Control": "no-store"})
+
+
+@router.post("/{review_id}/triplets")
+async def edit_triplet(review_id: str, request: TripletEdit, revision: int = Depends(expected_revision),
+                       service: ReviewService = Depends(get_review_service)):
+    return await response(await call(service.triplet_edit, review_id, revision, request))
+
+
 @router.post("/{review_id}/events")
 async def insert_event(review_id: str, event: EventAdd, revision: int = Depends(expected_revision),
                        service: ReviewService = Depends(get_review_service)):
@@ -106,6 +137,12 @@ async def remove_event(review_id: str, event_id: str, revision: int = Depends(ex
     return await response(await call(service.event_delete, review_id, revision, event_id))
 
 
+@router.post("/{review_id}/events/{event_id}/delete-preserve-timing")
+async def remove_event_preserving_timing(review_id: str, event_id: str, revision: int = Depends(expected_revision),
+                                         service: ReviewService = Depends(get_review_service)):
+    return await response(await call(service.event_delete, review_id, revision, event_id, True))
+
+
 @router.patch("/{review_id}/lyrics/{lyric_id}")
 async def update_lyric(review_id: str, lyric_id: str, patch: TextPatch,
                        revision: int = Depends(expected_revision), service: ReviewService = Depends(get_review_service)):
@@ -116,6 +153,12 @@ async def update_lyric(review_id: str, lyric_id: str, patch: TextPatch,
 async def remove_lyric(review_id: str, lyric_id: str, revision: int = Depends(expected_revision),
                        service: ReviewService = Depends(get_review_service)):
     return await response(await call(service.lyric_delete, review_id, revision, lyric_id))
+
+
+@router.post("/{review_id}/lyrics/{lyric_id}/move")
+async def move_lyric(review_id: str, lyric_id: str, move: LyricMove,
+                     revision: int = Depends(expected_revision), service: ReviewService = Depends(get_review_service)):
+    return await response(await call(service.lyric_move, review_id, revision, lyric_id, move))
 
 
 @router.post("/{review_id}/events/{event_id}/lyrics")
@@ -134,6 +177,24 @@ async def update_harmony(review_id: str, harmony_id: str, patch: HarmonyPatch,
 async def insert_harmony(review_id: str, harmony: HarmonyAdd, revision: int = Depends(expected_revision),
                          service: ReviewService = Depends(get_review_service)):
     return await response(await call(service.harmony_add, review_id, revision, harmony))
+
+
+@router.post("/{review_id}/texts")
+async def create_score_text(review_id: str, request: ScoreTextAdd, revision: int = Depends(expected_revision),
+                            service: ReviewService = Depends(get_review_service)):
+    return await response(await call(service.score_text_add, review_id, revision, request))
+
+
+@router.patch("/{review_id}/texts/{text_id}")
+async def update_score_text(review_id: str, text_id: str, patch: TextPatch, revision: int = Depends(expected_revision),
+                            service: ReviewService = Depends(get_review_service)):
+    return await response(await call(service.score_text_patch, review_id, revision, text_id, patch))
+
+
+@router.delete("/{review_id}/texts/{text_id}")
+async def delete_score_text(review_id: str, text_id: str, revision: int = Depends(expected_revision),
+                            service: ReviewService = Depends(get_review_service)):
+    return await response(await call(service.score_text_delete, review_id, revision, text_id))
 
 
 @router.patch("/{review_id}/metadata/title")
@@ -214,3 +275,9 @@ async def confirm_source_diagnostic(review_id: str, request: SourceConfirmation,
 async def move_note(review_id: str, event_id: str, request: EventMove, revision: int = Depends(expected_revision),
                     service: ReviewService = Depends(get_review_service)):
     return await response(await call(service.event_move, review_id, revision, event_id, request))
+
+
+@router.post("/{review_id}/slurs")
+async def edit_slur(review_id: str, request: SlurEdit, revision: int = Depends(expected_revision),
+                    service: ReviewService = Depends(get_review_service)):
+    return await response(await call(service.slur_edit, review_id, revision, request))

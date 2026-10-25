@@ -3,14 +3,15 @@
 from base64 import b64encode
 from dataclasses import asdict, replace
 from copy import deepcopy
+from fractions import Fraction
 import secrets
 from xml.etree import ElementTree as ET
 
 from app.core.config import Settings
 from app.music.review.document import Document, ReviewError
-from app.music.review.models import Diagnostic, EventAdd, EventPatch, HarmonyAdd, HarmonyPatch, LyricAdd, TextPatch
+from app.music.review.models import Diagnostic, EventAdd, EventPatch, HarmonyAdd, HarmonyPatch, LyricAdd, LyricMove, ScoreTextAdd, TextPatch
 from app.music.review.patcher import (
-    add_event, delete_event, group, patch_event, patch_harmony, patch_lyric, patch_title, put,
+    add_event, delete_event, delete_preserving_timing, group, patch_event, patch_harmony, patch_lyric, patch_title, put,
 )
 from app.music.review.source import prepare_source
 from app.music.review.storage import ReviewSession, ReviewStore
@@ -108,6 +109,28 @@ class ReviewService:
                                     continue
                                 options.append(value)
                         event["duration_options"] = options
+                        # Palette keys are WRITTEN durations; values are effective
+                        # command durations, checked by the existing spelling guard.
+                        palette = {}
+                        node = session.document.refs[event["id"]]
+                        modification = session.document.child(node, "time-modification")
+                        from .importer import rational
+                        ratio = Fraction(1)
+                        if modification is not None:
+                            actual = rational(session.document.text(modification, "actual-notes"))
+                            normal = rational(session.document.text(modification, "normal-notes"))
+                            ratio = normal / actual if actual and normal and actual > 0 and normal > 0 else None
+                        if not event["grace"] and ratio is not None:
+                            for base in (4, 2, 1, Fraction(1, 2), Fraction(1, 4), Fraction(1, 8), Fraction(1, 16)):
+                                for factor in (1, Fraction(3, 2), Fraction(7, 4)):
+                                    written = Fraction(base) * factor
+                                    effective = written * ratio
+                                    try:
+                                        duration_patch(session.document, deepcopy(node), str(effective), event["divisions"])
+                                    except ReviewError:
+                                        continue
+                                    palette[str(written)] = str(effective)
+                        event["palette_duration_options"] = palette
                         event["provenance"] = {
                             "origin": "semantic_recovery" if event["id"].startswith("recovery-") else
                                       "manual_addition" if event["id"].startswith("new-") else
@@ -116,6 +139,7 @@ class ReviewService:
                             "layer": "USER_CORRECTION" if session.document.manual_changes.get(event["id"]) or event["id"].startswith("new-") else "RECOGNITION_INTERPRETATION",
                             "evidence_ids": [i["id"] for i in evidence_candidates if event["id"] in (session.document.candidate_events.get(i["id"], i.get("event_id")), i.get("anchor_id"))],
                         }
+        from .slurs import pairs as slur_pairs
         return {"id": session.id, "revision": session.revision, "state": session.state,
                 "expires_at": session.expires_at, "score": projected,
                 "validation": {"can_verify": not errors, "error_count": errors,
@@ -128,6 +152,7 @@ class ReviewService:
                 "source_evidence": session.source_evidence,
                 "semantic_recovery": session.semantic_recovery,
                 "source": {"media_type": session.source.media_type, "pages": session.source.pages} if session.source else None,
+                "slurs": slur_pairs(session.document),
                 "musicxml_base64": b64encode(session.document.xml()).decode("ascii")}
 
     def _projection(self, session):
@@ -220,6 +245,32 @@ class ReviewService:
             doc.manual_changes[event_id] = sorted(set(doc.manual_changes.get(event_id, [])) | {"ownership", "voice", "staff", "onset"})
         return self.edit(identifier, revision, operation)
 
+    def replacement_options(self, identifier, revision, event_id):
+        from .triplet_replacement import replacement_options
+        with self.store.lock:
+            session = self._session(identifier, revision)
+            return replacement_options(session.document, revision, event_id)
+
+    def replacement_preview(self, identifier, revision, event_id, request):
+        from .triplet_replacement import preview_replacement
+        with self.store.lock:
+            session = self._session(identifier, revision)
+            return preview_replacement(session.document, revision, event_id, request)
+
+    def triplet_replace(self, identifier, revision, event_id, request):
+        from .triplet_replacement import replace_single
+        return self.edit(identifier, revision, lambda doc, new_id: replace_single(doc, new_id, event_id, request))
+
+    def triplet_preview(self, identifier, revision, request):
+        from .triplets import preview_selection
+        with self.store.lock:
+            session = self._session(identifier, revision)
+            return preview_selection(session.document, revision, request.event_ids)
+
+    def triplet_edit(self, identifier, revision, request):
+        from .triplets import triplet
+        return self.edit(identifier, revision, lambda doc, new_id: triplet(doc, new_id, request))
+
     def event_add(self, identifier, revision, request: EventAdd):
         def operation(doc, new_id):
             add_event(doc, new_id, request)
@@ -227,14 +278,52 @@ class ReviewService:
             doc.manual_changes[request.measure_id] = ["events"]
         return self.edit(identifier, revision, operation)
 
-    def event_delete(self, identifier, revision, event_id):
+    def event_delete(self, identifier, revision, event_id, preserve_timing=False):
         def operation(doc, _):
             note = doc.get(event_id, "note")
             parent = doc.parent(note)
             mid = next(key for key, value in doc.refs.items() if value is parent)
-            delete_event(doc, event_id)
+            from .slurs import disconnect_deleted
+            disconnect_deleted(doc, event_id)
+            if preserve_timing:
+                delete_preserving_timing(doc, event_id)
+            else:
+                delete_event(doc, event_id)
             doc.manual_changes[event_id] = ["deletion"]
             doc.manual_changes[mid] = ["events"]
+        return self.edit(identifier, revision, operation)
+
+    def slur_edit(self, identifier, revision, request):
+        from .slurs import apply
+        return self.edit(identifier, revision, lambda doc, _: apply(doc, request))
+
+    def lyric_move(self, identifier, revision, lyric_id, request: LyricMove):
+        def operation(doc, _):
+            from .importer import import_score
+            from .lyrics import auxiliary_lyric_owner
+            lyric = doc.get(lyric_id, "lyric")
+            source = doc.get(request.source_event_id, "note")
+            destination = doc.get(request.destination_event_id, "note")
+            if doc.parent(lyric) is not source or lyric.get("number", "1") != request.number:
+                raise ReviewError("The lyric owner or verse changed. Select it again.", 409)
+            if destination is source:
+                return False
+            score, _ = import_score(doc)
+            events = [e for p in score.parts for m in p.measures for v in m.voices for e in v.events]
+            targets = [e for e in events if e.id == request.destination_event_id]
+            if len(targets) != 1 or targets[0].kind != "note" or targets[0].pitch is None:
+                raise ReviewError("Choose a pitched destination note.")
+            if auxiliary_lyric_owner(score, targets[0]) is not None:
+                raise ReviewError("Select the normal-note lyric owner instead of its auxiliary note.")
+            if any(l.get("number", "1") == request.number for l in doc.children(destination, "lyric")):
+                raise ReviewError("The destination already contains this verse; nothing was overwritten.", 409)
+            source.remove(lyric)
+            index = next((i for i, child in enumerate(destination)
+                          if child.tag in (doc.namespace + "play", doc.namespace + "listen")), len(destination))
+            destination.insert(index, lyric)  # Move the complete subtree, retaining its sidecar identity.
+            for event_id in (request.source_event_id, request.destination_event_id):
+                doc.manual_changes[event_id] = sorted(set(doc.manual_changes.get(event_id, [])) | {"lyrics"})
+            doc.changed = True
         return self.edit(identifier, revision, operation)
 
     def lyric_patch(self, identifier, revision, lyric_id, request: TextPatch):
@@ -292,8 +381,27 @@ class ReviewService:
                                                     kind=request.kind or "major", text=request.text or ""))
         return self.edit(identifier, revision, operation)
 
+    def score_text_patch(self, identifier, revision, text_id, request: TextPatch):
+        from .score_text import patch_text
+        if request.segment_index:
+            raise ReviewError('Choose an independent text element; lyric segments use the lyric editor.')
+        return self.edit(identifier, revision, lambda doc, _: patch_text(doc, text_id, request.text))
+
+    def score_text_add(self, identifier, revision, request: ScoreTextAdd):
+        from .score_text import add_text
+        return self.edit(identifier, revision, lambda doc, new_id: add_text(doc, new_id, request))
+
+    def score_text_delete(self, identifier, revision, text_id):
+        from .score_text import delete_text
+        return self.edit(identifier, revision, lambda doc, _: delete_text(doc, text_id))
+
     def title_patch(self, identifier, revision, request: TextPatch):
-        return self.edit(identifier, revision, lambda doc, _: patch_title(doc, request.text))
+        def operation(doc, new_id):
+            patch_title(doc, request.text)
+            title = doc.child(doc.root, 'movement-title')
+            if title is not None and not any(node is title for node in doc.refs.values()):
+                doc.refs[new_id] = title
+        return self.edit(identifier, revision, operation)
 
     def credit_patch(self, identifier, revision, credit_id, request: TextPatch):
         def operation(doc, _):

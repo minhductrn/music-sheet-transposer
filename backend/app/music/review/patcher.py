@@ -54,13 +54,14 @@ def pitch_patch(doc, note, pitch: PitchInput):
 
 def size_patch(doc, note, size):
     note_type = doc.child(note, "type")
-    if note_type is None and size != "normal":
+    if note_type is None and size == "cue":
         raise ReviewError("A size edit requires a note type; correct its duration first.")
     head = doc.child(note, "notehead")
     note.attrib.pop("font-size", None)
     if size == "small":
         # Valid MusicXML visual attributes; neither introduces <grace> or <cue> timing.
-        note_type.set("size", "cue")
+        if note_type is not None:
+            note_type.set("size", "cue")
         put(doc, note, "notehead", head.text if head is not None else "normal").set("font-size", "small")
     elif size == "cue":
         note_type.set("size", "cue")
@@ -257,13 +258,19 @@ def add_event(doc: Document, identifier: str, request: EventAdd):
         put(doc, note, "rest")
     else:
         pitch_patch(doc, note, request.pitch)
+    inherit_position = bool(request.chord_with_id and "duration" not in request.model_fields_set)
     if request.chord_with_id:
         if event.kind != "note" or event.grace or request.grace:
             raise ReviewError("Simultaneous additions currently require duration-bearing pitched notes.")
         if request.voice is not None and request.voice != event.voice:
             raise ReviewError("A chord member must share its anchor's voice.")
+        rhythm_anchor = group(doc, anchor)[0] if inherit_position else anchor
+        if inherit_position:
+            _, rhythm = context(doc, rhythm_anchor)
+            if rhythm.kind != "note" or rhythm.grace or rhythm.onset is None or rational(rhythm.duration) is None or rational(rhythm.duration) <= 0 or rhythm.voice != event.voice:
+                raise ReviewError("The selected rhythmic position has unresolved timing or ownership. Technical Lead review is required.")
         for tag in ("duration", "type", "dot", "time-modification", "stem"):
-            for child in doc.children(anchor, tag):
+            for child in doc.children(rhythm_anchor, tag):
                 note.append(deepcopy(child))
         # Legacy chord requests without an explicit duration retain the anchor rhythm.
         if "duration" in request.model_fields_set:
@@ -285,6 +292,15 @@ def add_event(doc: Document, identifier: str, request: EventAdd):
     if anchor is not None:
         members = group(doc, anchor)
         position = list(measure).index(members[0]) if request.before_event_id else list(measure).index(members[-1]) + 1
+        if inherit_position:
+            last_duration = rational(doc.text(members[-1], "duration"))
+            if last_duration is None:
+                raise ReviewError("The selected chord has unresolved member timing. Technical Lead review is required.")
+            # Preserve established append order for shared-duration chords. A
+            # shorter last member cannot precede a longer new member in the
+            # current importer; place the inherited full rhythm after its leader.
+            if last_duration < rational(doc.text(members[0], "duration")):
+                position = list(measure).index(members[0]) + 1
     else:
         position = next((i for i, element in enumerate(measure) if local(element.tag) == "barline" and element.get("location", "right") == "right"), len(measure))
     measure.insert(position, note)
@@ -293,6 +309,44 @@ def add_event(doc: Document, identifier: str, request: EventAdd):
         from .ties import connect
         connect(doc, identifier, request.tie_to_event_id)
     doc.changed = True
+
+
+def delete_preserving_timing(doc: Document, identifier: str):
+    """Remove one pitch/event while preserving the existing XML cursor advance."""
+    note = doc.get(identifier, "note")
+    measure = doc.parent(note)
+    score, issues = import_score(doc)
+    mid = next(key for key, node in doc.refs.items() if node is measure)
+    timing_errors = {"invalid_divisions", "invalid_timing", "negative_onset", "invalid_duration",
+                     "broken_chord", "invalid_voice", "invalid_staff", "grace_duration"}
+    if any(i.measure_id == mid and i.code in timing_errors for i in issues):
+        raise ReviewError("Cannot preserve timing: invalid MusicXML timing or event ownership.")
+    events = [e for p in score.parts for m in p.measures if m.id == mid for v in m.voices for e in v.events]
+    if any(e.onset is None or (not e.grace and (e.duration is None or e.divisions is None)) for e in events):
+        raise ReviewError("Cannot preserve timing: event timing is unresolved.")
+    members = group(doc, note)
+    if members[0] is note and len(members) > 1 and doc.child(note, "grace") is None:
+        if rational(doc.text(note, "duration")) != rational(doc.text(members[1], "duration")):
+            raise ReviewError("Cannot preserve timing without changing a surviving chord note's duration.")
+    event = next(e for e in events if e.id == identifier)
+    index = list(measure).index(note)
+    # Existing deletion already compensates positioned standalone events. Reuse
+    # that path, adding the same protection explicitly for imported events.
+    if len(members) == 1 and not event.grace:
+        doc.positioned_events.add(identifier)
+    delete_event(doc, identifier)
+    if len(members) == 1 and not event.grace:
+        forward = list(measure)[index]
+        ET.SubElement(forward, doc.namespace + "voice").text = event.voice
+        ET.SubElement(forward, doc.namespace + "staff").text = str(event.staff)
+    after, _ = import_score(doc)
+    surviving = {e.id: e for p in after.parts for m in p.measures if m.id == mid for v in m.voices for e in v.events}
+    for old in events:
+        if old.id == identifier:
+            continue
+        new = surviving.get(old.id)
+        if new is None or (new.onset, new.duration, new.voice, new.staff, new.grace) != (old.onset, old.duration, old.voice, old.staff, old.grace):
+            raise ReviewError("Cannot preserve surviving event timing. No changes applied.")
 
 
 def delete_event(doc: Document, identifier: str):
@@ -421,6 +475,10 @@ def add_at_position(doc, identifier, request):
     duration = rational(request.duration)
     if duration is None or not 0 < duration <= 1024:
         raise ReviewError("Duration must be positive quarter beats (maximum 1024).")
+    gaps = [g for g in info.insertion_gaps if g['voice'] == request.voice and g['staff'] == request.staff
+            and rational(g['onset']) <= onset < rational(g['onset']) + rational(g['duration'])]
+    if not request.grace and gaps and all(onset + duration > rational(g['onset']) + rational(g['duration']) for g in gaps):
+        raise ReviewError("The note exceeds the available insertion interval.")
     existing = [e for v in info.voices for e in v.events if e.voice == request.voice and not e.grace]
     overlaps = [e for e in existing if not request.grace and onset < rational(e.onset) + rational(e.duration)
                 and rational(e.onset) < onset + duration]

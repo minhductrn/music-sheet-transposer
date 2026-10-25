@@ -73,6 +73,7 @@ class Measure:
     meter_context: list[dict] = field(default_factory=list)
     rhythm_status: str = "STRUCTURALLY_AMBIGUOUS"
     conflict_state: str = "NONE"
+    insertion_gaps: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -93,6 +94,7 @@ class EditableScore:
     pages: list[dict] = field(default_factory=list)
     systems: list[dict] = field(default_factory=list)
     layout: dict = field(default_factory=dict)
+    texts: list[dict] = field(default_factory=list)
 
 
 class Request(BaseModel):
@@ -148,14 +150,71 @@ class EventAdd(Request):
     grace: StrictBool = False
 
 
+class TripletSelection(Request):
+    event_ids: list[str] = Field(default_factory=list, max_length=128)
+
+
+class TripletEdit(Request):
+    measure_id: str = Field(min_length=1, max_length=128)
+    voice: str = Field(min_length=1, max_length=32, pattern=r"^\S+$")
+    staff: StrictInt = Field(ge=1, le=128)
+    base_duration: Literal['4', '2', '1', '1/2', '1/4', '1/8', '1/16']
+    pattern: Literal['equal', 'quarter-eighth'] = 'equal'
+    member_counts: tuple[Literal[1, 2], Literal[1, 2]] = (2, 2)
+    onset: str | None = Field(default=None, max_length=32)
+    pitches: list[PitchInput] = Field(default_factory=list, max_length=4)
+    event_ids: list[str] = Field(default_factory=list, max_length=4)
+
+    @model_validator(mode="after")
+    def explicit_group(self):
+        mixed = self.pattern == 'quarter-eighth'
+        if mixed and self.base_duration != '1':
+            raise ValueError('The mixed triplet pattern uses written quarter then eighth values.')
+        if self.event_ids:
+            valid_count = 2 <= len(self.event_ids) <= 4 if mixed else len(self.event_ids) == 3
+            if not valid_count or self.pitches or self.onset is not None:
+                raise ValueError('Choose the complete existing rhythmic group or an explicit insertion location and pitches.')
+        elif len(self.pitches) != (sum(self.member_counts) if mixed else 3) or self.onset is None:
+            raise ValueError('Choose every pitch required by the selected triplet structure and an onset.')
+        return self
+
+
+class TripletReplacement(Request):
+    preserve_associations: StrictBool = False
+    original_member_ids: list[str] | None = Field(default=None, min_length=1, max_length=3)
+    pattern: Literal['equal', 'quarter-eighth']
+    member_counts: tuple[Literal[1, 2], Literal[1, 2]] = (1, 1)
+    pitches: list[PitchInput] = Field(min_length=2, max_length=4)
+
+    @model_validator(mode="after")
+    def explicit_pitches(self):
+        if self.pattern == 'equal' and self.member_counts != (1, 1):
+            raise ValueError('Three equal notes must be single notes.')
+        if len(self.pitches) != (3 if self.pattern == 'equal' else sum(self.member_counts)):
+            raise ValueError('Choose every replacement pitch explicitly.')
+        return self
+
+
 class TextPatch(Request):
     text: str = Field(max_length=2000)
     segment_index: StrictInt = Field(default=0, ge=0, le=100)
 
 
+class ScoreTextAdd(Request):
+    role: Literal["work_title", "movement_title", "composer", "lyricist", "credit", "direction"]
+    text: str = Field(min_length=1, max_length=2000)
+    event_id: str | None = Field(default=None, min_length=1, max_length=128)
+
+
 class LyricAdd(Request):
     text: str = Field(max_length=2000)
     number: str = Field(default="1", min_length=1, max_length=16)
+
+
+class LyricMove(Request):
+    source_event_id: str = Field(min_length=1, max_length=128)
+    destination_event_id: str = Field(min_length=1, max_length=128)
+    number: str = Field(min_length=1, max_length=16)
 
 
 class HarmonyPatch(Request):
@@ -209,3 +268,10 @@ class EventMove(Request):
     onset: str = Field(min_length=1, max_length=32)
     voice: str = Field(min_length=1, max_length=32, pattern=r"^\S+$")
     staff: StrictInt = Field(ge=1, le=128)
+
+
+class SlurEdit(Request):
+    source_event_id: str = Field(min_length=1, max_length=128)
+    target_event_id: str = Field(min_length=1, max_length=128)
+    direction: Literal["up", "down"] = "up"
+    remove: StrictBool = False

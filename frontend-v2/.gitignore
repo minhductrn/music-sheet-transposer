@@ -1,0 +1,9 @@
+node_modules/
+dist/
+test-results/
+playwright-report/
+
+# Local verification artifacts and full reports can contain private score data.
+evidence/
+CODEX_TASK_01_REPORT.md
+CODEX_TASK_02_REPORT.md
