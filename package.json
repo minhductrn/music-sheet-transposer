@@ -1,0 +1,16 @@
+{
+  "name": "music-sheet-transposer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Default entry points for the accepted frontend-v2 workspace",
+  "scripts": {
+    "setup:frontend": "npm --prefix frontend-v2 ci",
+    "dev": "npm --prefix frontend-v2 run dev --",
+    "start": "npm --prefix frontend-v2 run dev --",
+    "build": "npm --prefix frontend-v2 run build --",
+    "typecheck": "npm --prefix frontend-v2 run typecheck --",
+    "lint": "npm --prefix frontend-v2 run lint --",
+    "test": "npm --prefix frontend-v2 test --",
+    "test:e2e": "npm --prefix frontend-v2 run test:e2e --"
+  }
+}

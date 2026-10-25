@@ -1,294 +1,85 @@
 # Music Sheet Transposer
 
-A full-stack application for importing MusicXML or PDF/image sheet music, reviewing and correcting recognition results, transposing MusicXML, previewing scores, and downloading corrected or transposed MusicXML.
+**Giao diện mặc định: `frontend-v2/`.** Các lệnh chạy, build và kiểm tra tại thư mục gốc đều dùng frontend-v2. `frontend/` được giữ làm tham chiếu lịch sử; không bị xóa hoặc thay tên.
 
-The current implementation includes Audiveris OMR, Vietnamese/English OCR, evidence-based semantic recovery, and a preservation-based MusicXML transposer. Recognition produces a draft for human comparison; it does not guarantee a faithful transcription of every source.
+Bản đã nghiệm thu hỗ trợ MusicXML thật: chỉnh sửa nốt/lời/tie/slur/nhóm nốt, đổi Concert Key, lưu Concert, tạo và chỉnh sửa bản Alto/Soprano/Tenor độc lập, xuất MusicXML/PDF. Original Source chỉ đọc; người dùng chỉnh sửa trong Working Score.
 
-## Architecture
+**Nhập PDF/hình ảnh và OMR thật chưa thuộc luồng frontend-v2 đã nghiệm thu.** Demo vẫn là mô phỏng. Các module OMR lịch sử trong backend không có nghĩa tính năng đó đã được tích hợp hoặc nghiệm thu trong giao diện mới.
 
-React + TypeScript provides the browser workspace and OpenSheetMusicDisplay (OSMD) preview. FastAPI exposes versioned REST APIs, with recognition, recovery, review, and transposition in separate backend modules. Frontend HTTP calls are centralized in `frontend/src/services/api.ts`.
+## Chạy ứng dụng để phát triển
 
-The production/default recognition provider is **Audiveris 5.11.0** (`RECOGNITION_PROVIDER=audiveris`).
-
-```text
-PDF / Image
-     |
-     v
-Audiveris 5.11
-     |
-     +--------------------+
-     |                    |
-     v                    v
-Baseline MusicXML     .omr evidence
-     |                    |
-     +---------+----------+
-               v
-       Semantic Recovery
-               |
-               v
-       Musical Validation
-               |
-               v
-       Confidence Decision
-          /           \
-         v             v
- HIGH confidence    AMBIGUOUS / uncertain
- Auto Recovery      Review Required
-          \           /
-           v         v
-     Validation / Human Review
-               |
-               v
-      Corrected MusicXML
-               |
-               v
-    Explicit Source Verification
-               |
-               v
-    Preservation Transposer
-               |
-               v
-      OSMD Preview / Export
-```
-
-Audiveris `.omr` archives can retain richer head, stem, chord, geometry, and timing evidence than exported MusicXML. Semantic recovery correlates that evidence with the baseline XML to recover some information lost during export. Automatic changes require strong, corroborated evidence and musical validation. Ambiguous candidates remain `REVIEW_REQUIRED`; the application avoids silent guessing. Visual small size alone does not imply grace-note timing.
-
-Semantic interpretation is enabled by default. The separate small-head **analysis pass is opt-in**, disabled by default, and supplies evidence without replacing the normal export. The Phase 4D.2 benchmark below used this additional pass; its recovery results are not a promise for default recognition. See [OMR integration](backend/OMR.md) and [semantic recovery](backend/SEMANTIC_RECOVERY.md).
-
-Direct MusicXML imports enter the transposition/preview workflow without OMR or recognition-review gating.
-
-## Implemented features
-
-- Import MusicXML; recognize PDF, PNG, JPEG, and WEBP sheet music through Audiveris.
-- Select recognition profiles and source-quality overrides; inspect recognition and timing diagnostics.
-- Use Tesseract `vie+eng` for Vietnamese/English text and lyrics in the default vocal and SATB profiles. Other profiles default to `eng`; OCR quality still depends on the source and language data.
-- Retain bounded `.omr` artifacts and expose semantic recovery candidates with confidence and source boxes.
-- Compare the original PDF/image with OSMD preview; correct events, lyrics, titles, printed credits, and harmony/chord symbols.
-- Validate corrections, undo/redo edits (including automatic recovery), explicitly verify against the source, and download original or corrected MusicXML.
-- Transpose by integer semitones, preview the result, and download transposed MusicXML.
-- Run optional, isolated OMR benchmarks; SMT remains outside the normal production workflow.
-
-### Preservation-based transposition
-
-```text
-Original MusicXML
-        |
-        v
-Preservation-based transposer
-        |
-        v
-Modify note pitches, key signatures, and related accidentals
-        |
-        v
-Preserve unrelated score structure
-        |
-        v
-Transposed MusicXML -> OSMD / Download
-```
-
-The MusicXML endpoint modifies a preserved XML document rather than rebuilding it through the smaller internal score model. Current code/tests demonstrate preservation of lyrics, dynamics/directions, ties/slurs, articulations, tempo, metadata, chord membership, voices/staves, backup/forward timing, and existing layout information. Harmony/chord-symbol XML is retained unchanged; its roots are **not automatically transposed** by this endpoint.
-
-Zero-semitone transposition returns the original bytes after document checks. Nonzero transposition preserves the document structure but can change XML serialization. Supported musical values are validated; this is not universal MusicXML support. The separate JSON score-model transposition API remains available.
-
-### Recognition review
-
-**Visual Review** is the default correction interface. Review and Transpose share the compact Select, Note, Lyrics, Tie and More toolbar. Contextual actions retain supported corrections; More provides explicit positioning and technical properties through the existing editor. See [current project state and acceptance scope](PROJECT_STATE_AND_DECISIONS.md).
-
-`RecognitionReview`, `EventInspector`, and `SourceViewer` provide measure/voice/event navigation, source comparison, candidate inspection, and explicit corrections. Supported edits include pitch, duration, voice, staff, display size, grace status, note/rest insertion or deletion, and simultaneous chord-note addition. Small display size and grace timing are separate controls.
-
-Reviews begin as drafts or review-required documents. Validation errors and unresolved candidate issues block verification; warnings still require musical judgment. Reviewers can confirm related manual corrections or explicitly accept notation after source comparison, with a handling note. Evidence provenance and handling travel through undo/redo. The user must confirm source comparison before marking a score `VERIFIED`. A revision-checked review endpoint then passes verified corrected XML directly to the existing transposer. The workspace provides verified corrected and transposed MusicXML exports; edits clear stale transposed output. Edits and undo/redo invalidate verification; candidate evidence records import-time findings and is not silently reevaluated after manual edits.
-
-Review sessions and bounded history are stored in process-local memory. Run one backend worker; a restart discards sessions and a browser reload loses local workspace state. Download corrected XML before leaving. See [review API, lifecycle, and correction limits](backend/REVIEW.md).
-
-## Real-world benchmark: Phase 4D.2
-
-**Cùng Đem Tin Mừng** was evaluated with normal Audiveris recognition plus an opt-in LINKS evidence pass on 2026-10-03. Analysis evidence contained **53 heads, including 4 explicit small heads**.
-
-| Metric | Baseline Audiveris MusicXML | After semantic recovery |
-|---|---:|---:|
-| Pitched notes | 51 | 53 |
-| Chord groups | 9 | 11 |
-| Ties | 16 | 16 |
-| Explicit small-display notes | 0 | 2 |
-| Grace notes | 0 | 0 |
-
-Recovery added two duration-bearing small-display notes with **zero grace-note conversions**.
-
-| Source location | Observed result |
-|---|---|
-| “ta” — A4 + C5 | Simultaneous structure and duration retained. C5 visual small-size evidence remains uncertain; review required. |
-| “cùng” — F4 + A4 | Simultaneous structure and duration retained. A4 visual small-size evidence remains uncertain; review required. |
-| “đem” — G4 + B-flat4 | B-flat4 was absent from baseline XML and recovered automatically from Audiveris evidence. It is visually small, shares G4's onset and quarter-note duration, and remains duration-bearing rather than a grace note. |
-| Measure 6 — G4 + B-flat4 | Another missing small B-flat4 was recovered with the same simultaneous, duration-bearing semantics. |
-
-This is a **specific benchmark result, not a general OMR accuracy percentage**. Other notation, pitch, or lyric errors can remain. Matching a historical note count does not establish accuracy. See [benchmark evidence and recovery decisions](backend/SEMANTIC_RECOVERY.md#real-cùng-đem-tin-mừng-benchmark-2026-10-03).
-
-### SMT: experimental / benchmark only
-
-**Sheet Music Transformer (SMT) is EXPERIMENTAL / BENCHMARK ONLY**, with `SMT_ENABLED=false` by default. It is not part of normal production recognition and is not an automatic fallback for Audiveris.
-
-This project's Phase 4D.1 benchmark of the `smt-grandstaff` checkpoint on the same score found:
-
-- Whole-score CPU inference timed out after 600 seconds.
-- A bounded excerpt returned 9 pitched tokens and 2 rests.
-- The target simultaneous structures were not preserved, and malformed symbolic spine structure prevented reliable timing.
-
-These results did not justify replacing Audiveris. They concern this checkpoint, input preparation, and environment, and do not establish that SMT is generally poor. The experimental worker retains symbolic output; it does not provide a MusicXML converter. See [SMT setup and benchmark decision](backend/SMT.md).
-
-## Technology stack
-
-| Area | Technologies |
-|---|---|
-| Frontend | React, TypeScript, Vite, React Router, OpenSheetMusicDisplay, CSS |
-| Backend | Python, FastAPI, Pydantic / Pydantic Settings, Uvicorn |
-| Validation and tests | pytest, HTTPX / FastAPI TestClient, ESLint, TypeScript compiler |
-| Recognition | Separately installed Audiveris 5.11.0, Tesseract language data, MusicXML |
-| Input handling | pypdf, Pillow |
-| Optional experiments | Isolated SMT worker and dependencies |
-
-Dependency declarations live in [frontend/package.json](frontend/package.json), [backend/requirements.txt](backend/requirements.txt), and [the isolated SMT requirements](backend/smt_worker/requirements.txt). The frontend lockfile records resolved versions; most backend dependencies are not pinned.
-
-## Project structure
-
-```text
-backend/
-  app/
-    api/                  Versioned health, transpose, recognition, and review APIs
-    core/                 Environment-based configuration
-    music/
-      musicxml/           Parser/exporter and preservation-based XML transposer
-      models/             Internal score model
-      transposition/      Model-based pitch/key/score operations
-      recognition/        Providers, upload validation, diagnostics, benchmarks
-      recovery/           .omr evidence, correlation, conservative XML recovery
-      review/             Editable projection, patches, validation, session history
-    schemas/              API request/response schemas
-  tests/                  Backend regression tests and synthetic fixtures
-  smt_worker/             Optional isolated experimental inference worker
-frontend/
-  src/
-    components/           OSMD viewer, review workspace, inspector, source viewer
-    pages/                Application workspace
-    services/             Centralized backend API client
-    types/                Typed API and music/review data
-```
-
-## Installation and development
-
-### Core app requirements
-
-Use Python 3.12+ and Node.js 22 (22.13+) or 24+ with npm (compatible with the locked Vite/ESLint toolchain). Audiveris and SMT are unnecessary for direct MusicXML transposition and mocked backend tests.
-
-From the repository root, start the backend:
+Dùng Ubuntu WSL, Node 24 và Python cùng môi trường backend hiện có. Với bản clone mới, tạo môi trường backend một lần:
 
 ```bash
 cd backend
 python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+.venv/bin/python -m pip install -r requirements.txt
+cd ..
 ```
 
-In another terminal, from the repository root:
+Từ thư mục gốc, terminal thứ nhất chạy backend:
 
 ```bash
-cd frontend
-npm ci
-cp .env.example .env
+cd backend
+.venv/bin/python -B -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Terminal thứ hai, ở thư mục gốc:
+
+```bash
+npm run setup:frontend
 npm run dev
 ```
 
-Open the URL printed by Vite. The development server proxies `/api` to `http://127.0.0.1:8000`; set `VITE_BACKEND_URL` in `frontend/.env` to change that proxy target. The health endpoint is `GET /api/v1/health`; interactive backend API documentation is at `http://127.0.0.1:8000/docs`.
+`setup:frontend` chỉ cần khi cài mới hoặc cập nhật dependencies. `npm start` cũng chạy giao diện phát triển v2. Mở **http://localhost:5174**. Giữ cả hai terminal trong lúc sử dụng; Ctrl+C để dừng. Nếu cổng đã có phiên đang chạy, dùng phiên đó hoặc dừng nó trước, không khởi chạy chồng lên.
 
-### PDF/image OMR requirements
-
-Install **Audiveris 5.11.0 separately**, including its required runtime/native components, following [the repository's OMR installation guide](backend/OMR.md#install-audiveris-outside-the-virtual-environment). The adapter targets Linux/WSL and POSIX process handling. Set `AUDIVERIS_EXECUTABLE` to its launcher if `audiveris` is not on `PATH`.
-
-Install compatible Tesseract **`vie` and `eng` language data** explicitly. For Ubuntu packages:
+Mặc định frontend proxy `/api` tới `http://127.0.0.1:8000`. Để đổi địa chỉ backend:
 
 ```bash
-sudo apt install tesseract-ocr tesseract-ocr-vie tesseract-ocr-eng
+AI_SDF_BACKEND_URL=http://127.0.0.1:8001 npm run dev
 ```
 
-Set the following before starting the backend, adjusting paths to your installation:
+Không dùng `VITE_BACKEND_URL` của giao diện cũ cho frontend-v2.
+
+## Build và kiểm tra mặc định
+
+Chạy từ thư mục gốc:
 
 ```bash
-export AUDIVERIS_EXECUTABLE=/path/to/audiveris-launcher
-export AUDIVERIS_TESSDATA_PATH=/path/to/tessdata
-export AUDIVERIS_OCR_LANGUAGES=vie+eng
-export RECOGNITION_PROVIDER=audiveris
-export SMT_ENABLED=false
-```
-
-The backend passes the selected language directory to Audiveris and checks for required model files; it never downloads them automatically. System Tesseract CLI installation is useful for checking language availability, while Audiveris uses its bundled OCR integration. See [Vietnamese OCR configuration](backend/OMR.md#vietnamese-ocr).
-
-| Backend environment variable | Default / purpose |
-|---|---|
-| `RECOGNITION_PROVIDER` | `audiveris` |
-| `AUDIVERIS_EXECUTABLE` | `audiveris`; one executable path |
-| `AUDIVERIS_TESSDATA_PATH` | Unset; falls back to inherited `TESSDATA_PREFIX`, then Audiveris's default directory |
-| `AUDIVERIS_OCR_LANGUAGES` | Profile-dependent; `vie+eng` for VOCAL_SONG and SATB |
-| `AUDIVERIS_INPUT_QUALITY` | Profile-dependent; request overrides server setting |
-| `AUDIVERIS_SEMANTIC_RECOVERY_ENABLED` | `true` |
-| `AUDIVERIS_SEMANTIC_ANALYSIS_ENABLED` | `false`; optional additional evidence pass |
-| `SMT_ENABLED` | `false`; experimental only |
-
-Backend settings read exported environment variables; `.env` files are not automatically loaded. Detailed bounds, timeouts, and review storage settings are documented in [OMR](backend/OMR.md), [semantic recovery](backend/SEMANTIC_RECOVERY.md), and [review](backend/REVIEW.md).
-
-### Optional experimental SMT requirements
-
-Normal development does not require SMT, Torch, GPU hardware, or model downloads. Deliberate SMT experiments use a separate Python environment, pinned upstream source/model, and explicitly enabled configuration. Follow [backend/SMT.md](backend/SMT.md); keep those dependencies out of the core backend environment.
-
-## Testing
-
-From `backend`, with its virtual environment installed:
-
-```bash
-env -u PYTHONPATH PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 .venv/bin/python -m pytest -q
-```
-
-From `frontend`:
-
-```bash
+npm run typecheck
 npm run lint
+npm test
 npm run build
 ```
 
-The **Phase 4D.2 validation checkpoint** recorded **544 backend tests passed with 2 existing dependency warnings**, frontend lint passed, and production build passed. This is a historical milestone checkpoint, not a permanent guarantee. Phase 4E validation passes **611 backend tests with the same 2 warnings**, frontend lint, and production build; see [review validation](backend/REVIEW.md#phase-4e-validation-checkpoint). Tests cover preservation, recognition boundaries, evidence parsing/recovery, conservative confidence handling, review corrections, verification, and undo; inference is mocked and requires no Audiveris or SMT execution.
+Build tạo kết quả tại **`frontend-v2/dist/`**. Không dùng `frontend/dist/` cho giao diện mặc định mới. Đây là build giao diện; để chạy gói có cả API, dùng Task 03 bên dưới.
 
-## Milestones and next direction
+`npm run test:e2e` dùng bộ Playwright của frontend-v2 và tự khởi động máy chủ trên cổng 5174/8812; cần các cổng đó đang trống. Cấu hình trình duyệt hiện có đường dẫn Firefox của máy WSL đã kiểm thử; máy khác cần điều chỉnh đường dẫn cục bộ trước khi chạy. Không cần Audiveris hoặc AI Agent cho luồng MusicXML này.
 
-| Milestone | Status | Outcome |
-|---|---|---|
-| Phase 4B | Complete | Preservation-based real-world MusicXML transposition |
-| Phase 4C | Complete | Audiveris OMR, Vietnamese OCR, diagnostics/review foundation |
-| Phase 4D.1 | Complete | SMT proof of concept; retained as experimental and disabled by default |
-| Phase 4D.2 | Complete | Audiveris semantic recovery |
-| Phase 4E | Complete (engine checkpoint) | Issue handling/provenance, verification gate, direct verified transposition and export |
-| Stage 1 correction / UX-03C | Implemented; scoped Product Owner acceptance recorded | P0.6B Tie Up/Down, Undo/Redo, MusicXML Save/Download/Reimport; corrected MusicXML export within verified Stage 1 scope; simplified shared editor |
+## Bản chạy thử độc lập — Task 03 đã nghiệm thu
 
-PDF/Image import, OMR Recognition and supported corrections are implemented. Concert-Key Transposition has existing automated and UI verification evidence; transposed-score MusicXML export is implemented. Transposed-score PDF Export and Stage 2 Alto/Soprano/Tenor saxophone transposition are not implemented. Recognition duration-accuracy issues remain deferred. Acceptance is limited to the Product Owner-confirmed Stage 1 and UX scope, not all recognition or rendering behavior.
+Bản đóng gói dùng cổng **5180**, có frontend đã build và thư viện backend đi kèm, chạy không cần Node, Codex hoặc terminal phát triển. Gói dành cho Ubuntu WSL/Python ABI đã ghi trong manifest, chưa phải bộ cài Windows hoặc triển khai production.
 
-User-imported PDFs/images and resulting MusicXML/PDF files remain local and must not be committed to GitHub. This repository policy does not change Save/Export. Users are responsible for copyright compliance when sharing files; copyright enforcement is outside application scope. See [baseline scope and tracked-artifact blocker](BASELINE_MANIFEST.md).
+- [Hướng dẫn người dùng](pilot-release/USER_GUIDE_VI.md)
+- [Cách đóng gói lại từ checkpoint đã nghiệm thu](pilot-release/README.md)
+- [Báo cáo nghiệm thu Task 03](pilot-release/TASK_03_REPORT.md)
+- [Checkpoint UX v2](frontend-v2/RELEASE_CHECKPOINT.md)
 
-## Limitations
+Archive/runtime và bằng chứng có dữ liệu riêng tư chỉ lưu local, không đưa vào Git. Clone repository cung cấp mã nguồn và builder; không tự có sẵn gói runtime đã tạo trên máy thử nghiệm.
 
-- OMR is not guaranteed to be perfect; source quality and notation complexity affect results. Unusual or ambiguous notation may require human review.
-- Mixed-size notation depends on available OMR evidence. The benchmark's “ta” and “cùng” visual-size cases remain review-required.
-- OSMD system/page layout can differ substantially from the source PDF; source layout reconstruction is a known limitation outside manual musical correction.
-- Human review supports inserting duration-bearing notes with an explicit adjacent tie target and adding/changing/removing ties on existing notes; see [missing-note correction](backend/REVIEW.md#human-missing-note-correction-with-a-tie).
-- OSMD currently has a mixed-size chord rendering limitation; preserved XML semantics do not guarantee an identical visual preview.
-- Semantic recovery supports corroborated simultaneous-note additions and small-display preservation, not arbitrary missing-note or rhythm repair. Unsupported evidence and ambiguous mappings remain for review.
-- Structural validation cannot prove transcription accuracy or complete MusicXML schema compliance. Complex or unsupported musical values can be rejected.
-- Harmony symbols are preserved but are not automatically transposed by the MusicXML transposer.
-- Review storage is temporary and limited to one backend process; persistent accounts/shared storage are not implemented.
-- SMT remains experimental, disabled by default, and outside the production recognition path.
+## Lưu và mở lại dữ liệu
 
-## License
+Dùng Save As để bảo vệ file gốc. Với trình duyệt tải file xuống, chỉ xác nhận đã giữ file sau khi kiểm tra file trên máy. Lưu Concert trước khi tạo bản nhạc cụ; lưu từng bản nhạc cụ cần giữ. Mở lại bằng file MusicXML đã lưu. Các phiên bộ nhớ, Undo/Redo và biến thể chưa lưu không tự phục hồi sau khi đóng ứng dụng.
 
-License information will be added when the project licensing decision is finalized.
+## Cấu trúc và lịch sử
 
-Phase 4F.1 strengthens Visual Review with an XML-bound structural projection,
-source-evidence retention and guarded source-system layout. **No silent rhythmic
-repair:** recognized conflicts remain visible; only explicit corrections change
-musical content. See [the source-fidelity contract](backend/PHASE4F_NOTATION_EDITOR_ARCHITECTURE.md).
+| Thư mục | Vai trò |
+| --- | --- |
+| `frontend-v2/` | Giao diện mặc định đã nghiệm thu |
+| `backend/` | API MusicXML/review/transposition; giữ nguyên trong thay đổi mặc định này |
+| `pilot-release/` | Builder, launcher và hướng dẫn bản chạy độc lập |
+| `frontend/` | Giao diện cũ, giữ nguyên để tham chiếu |
+
+[README lịch sử](README_LEGACY.md) giữ tài liệu cũ về frontend/OMR và các benchmark; không dùng các trạng thái lịch sử đó để suy ra phạm vi nghiệm thu v2 hiện tại. Không có cấu hình CI/hosting triển khai tự động trong repository tại thời điểm chuyển mặc định này; chưa thực hiện production deployment.
+
+Quy trình quản trị: [Product Constitution](PRODUCT_CONSTITUTION.md), [Acceptance Criteria](ACCEPTANCE_CRITERIA.md), và [báo cáo chuyển giao diện mặc định](DEFAULT_FRONTEND_REPORT.md).
