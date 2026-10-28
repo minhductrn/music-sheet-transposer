@@ -175,6 +175,8 @@ class MusicRecognitionService:
         except RecognitionError:
             raise
         except Exception as error:
+            if type(error).__name__ == "DependencyError" and "AES" in str(error):
+                raise RecognitionError("Encrypted PDFs are not supported. Use an unencrypted PDF copy; the original is unchanged.") from error
             raise RecognitionError("The PDF is damaged or cannot be read.") from error
         if count == 0 or count > self.config.recognition_max_pages:
             raise RecognitionError(

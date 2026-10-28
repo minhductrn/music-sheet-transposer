@@ -54,7 +54,25 @@ def patch_text(doc, identifier, text):
         raise ReviewError('This text contains nested content; it cannot be flattened by a text edit.')
     if node.text == text:
         return False
-    node.text = text
+    entries=project_texts(doc)
+    selected=next(entry for entry in entries if entry['id']==identifier)
+    # Synchronize only an exact, unique metadata/printed composer pair.
+    # Unrelated equal strings and multiple credits remain independent.
+    matches=[entry for entry in entries if entry['text']==node.text and entry['role'] in ('composer','printed_composer')]
+    if selected['role'] in ('composer','printed_composer') and len(matches)==2 and {entry['role'] for entry in matches}=={'composer','printed_composer'}:
+        for entry in matches:
+            partner=doc.refs[entry['id']]
+            if not len(partner):partner.text=text
+    else:
+        title_roles={'movement_title','work_title','printed_title','credit'}
+        titles=[entry for entry in entries if entry['text']==node.text and entry['role'] in title_roles]
+        roles={entry['role'] for entry in titles}
+        if selected['role'] in title_roles and 2<=len(titles)<=3 and len(roles)==len(titles) and roles & {'movement_title','work_title'} and len([entry for entry in titles if entry['role'] in ('printed_title','credit')])==1:
+            for entry in titles:
+                partner=doc.refs[entry['id']]
+                if not len(partner):partner.text=text
+        else:
+            node.text = text
     doc.changed = True
 
 
@@ -67,7 +85,10 @@ def delete_text(doc, identifier):
         if len(parent) == 1 and not other_types:
             # A sound/footnote/extension may carry meaning independent of the words.
             if any(local(c.tag) not in ('direction-type', 'offset', 'staff', 'voice') for c in direction):
-                raise ReviewError('This passage shares a direction with other content. Edit its text; deletion needs a separate preservation workflow.')
+                node.text=''
+                del doc.refs[identifier]
+                doc.changed=True
+                return
             doc.parent(direction).remove(direction)
         else:
             parent.remove(node)

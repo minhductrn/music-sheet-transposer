@@ -191,6 +191,11 @@ def patch_event(doc: Document, identifier: str, patch: EventPatch):
                 remove(doc, member, "grace")
         if not grace and event.grace and patch.duration is None:
             raise ReviewError("Converting grace to a regular note requires an explicit duration.")
+    if patch.grace_slash is not None:
+        if not grace:
+            raise ReviewError("A grace slash requires a grace note.")
+        for member in members:
+            doc.child(member, "grace").set("slash", "yes" if patch.grace_slash else "no")
     if patch.duration is not None:
         if patch.duration_scope == "note" and not grace and len(members) > 1:
             requested = rational(patch.duration)
@@ -282,7 +287,11 @@ def add_event(doc: Document, identifier: str, request: EventAdd):
         # Type size copied from the anchor is replaced with the explicitly requested display size.
     else:
         if request.grace:
-            put(doc, note, "grace")
+            grace_node = put(doc, note, "grace")
+            if request.grace_slash is not None:
+                grace_node.set("slash", "yes" if request.grace_slash else "no")
+        elif request.grace_slash is not None:
+            raise ReviewError("A grace slash requires a grace note.")
         duration_patch(doc, note, request.duration, info.divisions, request.grace)
     if request.written_accidental is not None:
         accidental_patch(doc, note, request.written_accidental)

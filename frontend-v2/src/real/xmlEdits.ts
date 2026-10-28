@@ -89,3 +89,59 @@ export function appendMeasure(review: Review) {
     m.append(forward);part.append(m);
     return new XMLSerializer().serializeToString(doc);
 }
+
+
+// Explicit source correction at the beginning of the chosen measure. This does
+// not transpose notes or infer meter/key from OMR confidence.
+export function measureContext(review: Review, measureId: string, field: 'time'|'key'|'clef'|'staves'|'partial'|'barline', value: string, staff=1) {
+    const doc = new DOMParser().parseFromString(review.xml,'application/xml');
+    if(doc.querySelector('parsererror'))throw Error('Invalid MusicXML.');
+    const ns=doc.documentElement.namespaceURI;
+    const child=(n:Element,tag:string)=>[...n.children].find(c=>c.localName===tag);
+    const parts=[...doc.documentElement.children].filter(n=>n.localName==='part');
+    let target:Element|undefined;
+    review.score.parts.forEach((p,i)=>{const j=p.measures.findIndex(m=>m.id===measureId);if(j>=0)target=[...parts[i].children].filter(n=>n.localName==='measure')[j];});
+    if(!target)throw Error('Choose a measure.');
+    const measure=target;
+    const create=(tag:string,text?:string)=>{const n=doc.createElementNS(ns,tag);if(text!==undefined)n.textContent=text;return n;};
+    if(field==='partial'){if(!['yes','no'].includes(value))throw Error('Partial measure uses yes or no.');measure.setAttribute('implicit',value==='yes'?'yes':'no');}
+    else if(field==='barline'){
+        if(!['regular','light-light','light-heavy','heavy-light','dashed','dotted','none'].includes(value))throw Error('Choose a supported barline style.');
+        let bar=[...measure.children].find(n=>n.localName==='barline'&&n.getAttribute('location')!=='left');
+        if(!bar){bar=create('barline');bar.setAttribute('location','right');measure.append(bar);}
+        child(bar,'bar-style')?.remove();bar.prepend(create('bar-style',value));
+    } else {
+        let attr:Element|undefined;for(const node of measure.children){if(['note','forward','backup'].includes(node.localName))break;if(node.localName==='attributes'){attr=node;break;}}
+        if(!attr){attr=create('attributes');measure.prepend(attr);}
+        const name=field==='staves'?'staves':field;
+        const old=field==='clef'?[...attr.children].find(n=>n.localName==='clef'&&Number(n.getAttribute('number')??1)===staff):child(attr,name);
+        const replacement=create(name);
+        if(field==='time'){
+            const [beats,type]=value.split('/');if(!/^[1-9]\d?(?:\+[1-9]\d?)*$/.test(beats)||!['1','2','4','8','16','32','64'].includes(type))throw Error('Enter a valid meter such as 4/4, 3/8 or 3+2/8.');
+            replacement.append(create('beats',beats),create('beat-type',type));
+        }else if(field==='key'){
+            const fifths=Number(value);if(!Number.isInteger(fifths)||Math.abs(fifths)>7)throw Error('Choose a key signature from -7 to +7.');replacement.append(create('fifths',value));
+        }else if(field==='clef'){
+            const [sign,line]=value.split(':');if(!['G','F','C'].includes(sign)||!['1','2','3','4','5'].includes(line))throw Error('Choose a valid clef, such as G:2 or F:4.');replacement.setAttribute('number',String(staff));replacement.append(create('sign',sign),create('line',line));
+        }else{
+            const count=Number(value),model=review.score.parts.flatMap(p=>p.measures).find(m=>m.id===measureId);
+            if(!Number.isInteger(count)||count<1||count>8||model?.voices.some(v=>v.events.some(e=>e.staff>count)))throw Error('Staff count must include all existing notes and be between 1 and 8.');replacement.textContent=value;
+        }
+        if(old)old.replaceWith(replacement);else {
+            const rank=['divisions','key','time','staves','part-symbol','instruments','clef','staff-details','transpose','directive','measure-style'];
+            attr.insertBefore(replacement,[...attr.children].find(n=>rank.indexOf(n.localName)>rank.indexOf(name))??null);
+        }
+    }
+    return new XMLSerializer().serializeToString(doc);
+}
+
+// Explicit user declaration only: add missing initial key without transposing notes.
+export function declareInitialKey(xml:string,fifths:number,mode:'major'|'minor'){
+ if(!Number.isInteger(fifths)||Math.abs(fifths)>7)throw Error('Choose a supported original key.');
+ const doc=new DOMParser().parseFromString(xml,'application/xml');if(doc.querySelector('parsererror'))throw Error('Invalid MusicXML.');const ns=doc.documentElement.namespaceURI;
+ const children=(e:Element,n:string)=>[...e.children].filter(c=>c.localName===n);const create=(name:string)=>doc.createElementNS(ns,name);
+ for(const part of children(doc.documentElement,'part')){const first=children(part,'measure')[0];if(!first)continue;const initial:Element[]=[];for(const node of first.children){if(['note','forward','backup'].includes(node.localName))break;if(node.localName==='attributes')initial.push(node);}if(initial.some(a=>children(a,'key').length))continue;
+ let attrs=initial[0];if(!attrs){attrs=create('attributes');first.prepend(attrs);}const key=create('key'),f=create('fifths'),m=create('mode');f.textContent=String(fifths);m.textContent=mode;key.append(f,m);attrs.insertBefore(key,[...attrs.children].find(c=>c.localName!=='divisions')??null);
+ }
+ const result=new XMLSerializer().serializeToString(doc);return /^\s*<\?xml\b/.test(result)?result:'<?xml version="1.0" encoding="utf-8"?>\n'+result;
+}

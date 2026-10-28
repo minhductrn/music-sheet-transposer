@@ -132,9 +132,17 @@ def test_undo_redo_restores_correction_and_stable_ids_for_every_operation(setup_
     edited = response.json()
     undo = change(client, edited, "undo").json()
     assert b64decode(undo["musicxml_base64"]) == XML
-    assert undo["score"] == review["score"] and undo["can_redo"]
+    def semantic_score(payload):
+        from copy import deepcopy
+        score=deepcopy(payload["score"])
+        for mark in score.get("omr_marks",[]):
+            prefix,separator,stable=mark["id"].partition("|")
+            assert separator and prefix==str(payload["revision"])
+            mark["id"]=stable
+        return score
+    assert semantic_score(undo) == semantic_score(review) and undo["can_redo"]
     redo = change(client, undo, "redo").json()
-    assert redo["score"] == edited["score"]
+    assert semantic_score(redo) == semantic_score(edited)
     assert b64decode(redo["musicxml_base64"]) == b64decode(edited["musicxml_base64"])
     assert redo["state"] == "REVIEW_REQUIRED"
 
@@ -350,3 +358,25 @@ def test_source_mime_fallback_uses_validated_content_not_a_filename(setup_review
     client, _, _ = setup_review
     review = create(client, source=("original.data", image(), "application/octet-stream")).json()
     assert review["source"]["media_type"] == "image/png"
+
+
+def test_open_editor_keepalive_preserves_revision_history_and_source(setup_review):
+    client, service, now = setup_review
+    data=create(client, source=("original.png", image(), "image/png")).json()
+    before=service.get(data['id'])
+    session=service.store.get(data['id'])
+    history=(list(session.undo),list(session.redo),session.sequence)
+    now[0]+=50
+    kept=client.post(f"/api/v1/reviews/{data['id']}/keepalive")
+    assert kept.status_code==200
+    assert kept.json()['expires_at']==now[0]+60
+    now[0]+=20
+    after=service.get(data['id'])
+    assert after['revision']==before['revision']
+    assert after['musicxml_base64']==before['musicxml_base64']
+    assert after['source']==before['source']
+    current=service.store.get(data['id'])
+    assert (current.undo,current.redo,current.sequence)==history
+    now[0]+=61
+    assert client.post(f"/api/v1/reviews/{data['id']}/keepalive").status_code==404
+    assert client.get(f"/api/v1/reviews/{data['id']}").status_code==404

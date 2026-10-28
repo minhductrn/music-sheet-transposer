@@ -100,7 +100,7 @@ def _transpose_note(note: minidom.Element, semitones: int, fifths: int) -> None:
         _set_text(accidental, _ACCIDENTALS[alter])
 
 
-def _transpose_key(key: minidom.Element, semitones: int) -> int:
+def _transpose_key(key: minidom.Element, semitones: int, fifths_delta: int | None = None) -> int:
     fifths = _child(key, "fifths")
     if fifths is None:
         raise MusicXMLTranspositionError(
@@ -111,17 +111,23 @@ def _transpose_key(key: minidom.Element, semitones: int) -> int:
     destination = transpose_key_signature(
         KeySignature(fifths=int(_text(fifths)), mode=mode), semitones,
     )
+    # Sax written intervals have a diatonic key spelling. Prefer that signature
+    # when it is representable, instead of choosing an enharmonic flat key.
+    if fifths_delta is not None and -7 <= int(_text(fifths)) + fifths_delta <= 7:
+        destination=KeySignature(fifths=int(_text(fifths))+fifths_delta,mode=mode)
     _set_text(fifths, destination.fifths)
     cancel = _child(key, "cancel")
     if cancel is not None:
         cancellation = transpose_key_signature(
             KeySignature(fifths=int(_text(cancel)), mode=mode), semitones,
         )
+        if fifths_delta is not None and -7 <= int(_text(cancel)) + fifths_delta <= 7:
+            cancellation=KeySignature(fifths=int(_text(cancel))+fifths_delta,mode=mode)
         _set_text(cancel, cancellation.fifths)
     return destination.fifths
 
 
-def transpose_musicxml_document(contents: bytes, semitones: int) -> bytes:
+def transpose_musicxml_document(contents: bytes, semitones: int, *, fifths_delta: int | None = None) -> bytes:
     """Preserve XML nodes and ordering; change pitches, keys and printed accidentals.
 
     Zero transposition returns the validated original bytes, including formatting.
@@ -157,7 +163,7 @@ def transpose_musicxml_document(contents: bytes, semitones: int) -> bytes:
                         continue
                     if event.localName == "attributes":
                         for key in _children(event, "key"):
-                            destination_fifths = _transpose_key(key, semitones)
+                            destination_fifths = _transpose_key(key, semitones, fifths_delta)
                             if key.hasAttribute("number"):
                                 staff_keys[key.getAttribute("number")] = destination_fifths
                             else:

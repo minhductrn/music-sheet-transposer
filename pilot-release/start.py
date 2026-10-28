@@ -3,6 +3,7 @@ from pathlib import Path
 import argparse
 import hashlib
 import json
+import os
 import platform
 import socket
 import sys
@@ -25,7 +26,14 @@ def main():
     parser.add_argument("--port", type=int, default=5180)
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
-    verify()
+    manifest = verify()
+    if manifest.get("omr_enabled"):
+        executable = Path(os.environ.get("AUDIVERIS_EXECUTABLE", "/opt/audiveris/bin/Audiveris"))
+        models = Path(os.environ.get("AUDIVERIS_TESSDATA_PATH", str(Path.home() / ".config/AudiverisLtd/audiveris/tessdata")))
+        if not executable.is_file() or not all((models / name).is_file() for name in ("vie.traineddata", "eng.traineddata")):
+            raise SystemExit("Task 04 needs the existing Audiveris executable and vie/eng models. Set AUDIVERIS_EXECUTABLE and AUDIVERIS_TESSDATA_PATH. No automatic installation is performed.")
+        os.environ["AUDIVERIS_EXECUTABLE"] = str(executable)
+        os.environ["AUDIVERIS_TESSDATA_PATH"] = str(models)
     if args.check:
         print("Package integrity and Python ABI: PASS")
         return
@@ -46,6 +54,8 @@ def main():
 
     @app.middleware("http")
     async def pilot_boundary(request, call_next):
+        if request.url.path == "/api/v1/recognize" and manifest.get("omr_enabled"):
+            return await call_next(request)
         if request.url.path.startswith("/api/") and not request.url.path.startswith(("/api/v1/reviews", "/api/v1/transpose", "/api/v1/concert-key", "/api/v1/health")):
             return JSONResponse({"detail": "This pilot supports MusicXML only; OMR is outside Task 03."}, status_code=404)
         return await call_next(request)

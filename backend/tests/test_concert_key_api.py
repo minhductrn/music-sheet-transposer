@@ -119,3 +119,20 @@ def test_missing_or_unsupported_key_information_is_actionable(workflow, replacem
     response = client.post('/api/v1/concert-key', files={'file': ('source.musicxml', score().replace(*replacement))})
     assert response.status_code == 422
     assert expected in response.json()['detail']
+
+
+@pytest.mark.parametrize('direction,target,shift',[('up',-3,3),('down',-3,-9)])
+def test_confirmed_missing_initial_key_preserves_modulation_and_pitch_intervals(workflow,direction,target,shift):
+    client,_=workflow
+    original=score().replace(b'<key><fifths>0</fifths><mode>major</mode></key>',b'').replace(b'<measure number="2">',b'<measure number="2"><attributes><key><fifths>3</fifths><mode>major</mode></key></attributes>')
+    response=client.post('/api/v1/transpose/concert-key',files={'file':('omr.musicxml',original)},data={'source_fifths':'0','source_mode':'minor','source_confirmed':'true','target_fifths':str(target),'direction':direction})
+    assert response.status_code==200,response.text
+    before,after=ET.fromstring(original),ET.fromstring(response.content)
+    assert after.findtext('.//measure/attributes/key/fifths')==str(target)
+    assert after.findtext('.//measure/attributes/key/mode')=='minor'
+    assert [int(k.findtext('fifths')) for k in after.findall('.//key')]==[target]+[int(k.findtext('fifths'))+target for k in before.findall('.//key')]
+    values={'C':0,'D':2,'E':4,'F':5,'G':7,'A':9,'B':11}
+    def midi(p):return int(p.findtext('octave'))*12+values[p.findtext('step')]+int(p.findtext('alter','0'))
+    assert [midi(p) for p in after.findall('.//note/pitch')]==[midi(p)+shift for p in before.findall('.//note/pitch')]
+    assert invariant(response.content)==invariant(original)
+    assert create(client,response.content)['musicxml_base64']

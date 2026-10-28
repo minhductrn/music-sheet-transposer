@@ -77,11 +77,15 @@ export type Slur = {
 };
 export type Review = {
     id: string;
+    can_undo?: boolean;
+    can_redo?: boolean;
     revision: number;
     musicxml_base64: string;
     xml: string;
     bytes: Uint8Array;
     score: {
+        harmonies?: {id:string;measure_id:string;onset:string;root_step:string;root_alter:string;kind:string;text:string}[];
+        omr_marks?: {id:string;kind:string;measure_id:string;onset:string;staff:number;type:string}[];
         metadata: {
             title: string;
         };
@@ -129,6 +133,7 @@ catch (error) {
 } }
 export const xmlBlob = (xml: string) => new Blob([xml], { type: 'application/vnd.recordare.musicxml+xml' });
 export async function openXML(file: Blob) { const form = new FormData(); form.append('musicxml', file, 'concert.musicxml'); return projection(await fetch('/api/v1/reviews', { method: 'POST', body: form })); }
+export async function keepReviewAlive(id:string){await checked(await fetch(`/api/v1/reviews/${encodeURIComponent(id)}/keepalive`,{method:'POST'}));}
 export async function closeReview(id: string) { await fetch(`/api/v1/reviews/${encodeURIComponent(id)}`, { method: 'DELETE', keepalive: true }); }
 export async function edit(r: Review, path: string, body?: unknown, method = 'POST') { return projection(await fetch(`/api/v1/reviews/${encodeURIComponent(r.id)}/${path}`, { method, headers: { 'Content-Type': 'application/json', 'If-Match': String(r.revision) }, body: body === undefined ? undefined : JSON.stringify(body) })); }
 async function fileOperation(path: string, xml: string, fields: Record<string, string>) { const form = new FormData(); form.append('file', xmlBlob(xml), 'concert.musicxml'); for (const [k, v] of Object.entries(fields))
@@ -146,4 +151,44 @@ export async function previewTriplet(r: Review, event_ids: string[]): Promise<{
     message?: string;
     command?: unknown;
 }> { return (await checked(await fetch(`/api/v1/reviews/${encodeURIComponent(r.id)}/triplets/preview`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'If-Match': String(r.revision) }, body: JSON.stringify({ event_ids }) }))).json(); }
-export function dottedWritten(base: string, dot: boolean) { const [n, d = 1] = base.split('/').map(Number); let a = n * (dot ? 3 : 1), b = d * (dot ? 2 : 1); const gcd = (x: number, y: number): number => y ? gcd(y, x % y) : x; const g = gcd(a, b); a /= g; b /= g; return b === 1 ? String(a) : `${a}/${b}`; }
+export function dottedWritten(base: string, dot: boolean | number) { const [n, d = 1] = base.split('/').map(Number); let a = n * (dot === 2 ? 7 : dot ? 3 : 1), b = d * (dot === 2 ? 4 : dot ? 2 : 1); const gcd = (x: number, y: number): number => y ? gcd(y, x % y) : x; const g = gcd(a, b); a /= g; b /= g; return b === 1 ? String(a) : `${a}/${b}`; }
+
+
+export type RecognitionDraft = {
+    musicxml_base64: string;
+    baseline_musicxml_base64?: string | null;
+    omr_artifact?: { data_base64: string } | null;
+    semantic_evidence_artifact?: { data_base64: string } | null;
+    warnings: { code: string; message: string; measure?:string|null; part_id?:string|null }[];
+    provider: string;
+    profile: string;
+};
+const artifactBlob = (encoded: string) => new Blob([Uint8Array.from(atob(encoded), c => c.charCodeAt(0))], {type:'application/octet-stream'});
+// Adopt the baseline and evidence exactly once. Reimporting recovered XML with the
+// same evidence would apply recovery twice and lose review provenance/history.
+export async function recognizeSource(file: File, profile = 'VOCAL_SONG'): Promise<{review: Review; recognition: RecognitionDraft}> {
+    const request = new FormData();
+    request.append('file', file);
+    request.append('profile', profile);
+    request.append('response_format', 'json');
+    const recognition: RecognitionDraft = await (await checked(await fetch('/api/v1/recognize', {method:'POST',body:request}))).json();
+    const form = new FormData();
+    const baseline = recognition.baseline_musicxml_base64 ?? recognition.musicxml_base64;
+    form.append('musicxml', new Blob([Uint8Array.from(atob(baseline), c => c.charCodeAt(0))], {type:'application/vnd.recordare.musicxml+xml'}), 'recognized.musicxml');
+    form.append('source', file);
+    if (recognition.omr_artifact) form.append('omr', artifactBlob(recognition.omr_artifact.data_base64), 'recognized.omr');
+    if (recognition.semantic_evidence_artifact) form.append('analysis_omr', artifactBlob(recognition.semantic_evidence_artifact.data_base64), 'semantic-evidence.omr');
+    return {review: await projection(await fetch('/api/v1/reviews', {method:'POST',body:form})), recognition};
+}
+
+export async function correctDocument(r: Review, xml: string) {
+    const form = new FormData(); form.append('musicxml', xmlBlob(xml), 'correction.musicxml');
+    return projection(await fetch(`/api/v1/reviews/${encodeURIComponent(r.id)}/document-correction`, {method:'POST',headers:{'If-Match':String(r.revision)},body:form}));
+}
+
+export async function manualSource(file: File): Promise<Review> {
+    // An explicit empty document, never a fabricated recognition result.
+    const xml='<score-partwise version="4.0"><part-list><score-part id="P1"><part-name>Manual reconstruction</part-name></score-part></part-list><part id="P1"><measure number="1"><attributes><divisions>192</divisions><key><fifths>0</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes><forward><duration>768</duration><voice>1</voice><staff>1</staff></forward></measure></part></score-partwise>';
+    const form=new FormData();form.append('musicxml',xmlBlob(xml),'manual.musicxml');form.append('source',file);
+    return projection(await fetch('/api/v1/reviews',{method:'POST',body:form}));
+}

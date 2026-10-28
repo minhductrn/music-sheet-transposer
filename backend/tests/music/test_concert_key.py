@@ -80,7 +80,7 @@ def test_chords_and_all_unrelated_notation_survive():
     assert [n.get('orientation') for n in root.findall('.//tied')] == ['over', 'under', 'over', 'under']
     assert [n.findtext('pitch/step') for n in root.findall('.//note') if n.find('pitch') is not None] == ['D', 'F', 'D', 'F']
     assert all(n.findtext('pitch/alter') == '1' for n in root.findall('.//note') if n.findtext('pitch/step') == 'F')
-    assert transpose_concert_key(original, 0, 'down') == original
+    assert transpose_concert_key(original, 0, 'up') == original
 
 
 def test_unpitched_and_percussion_are_untouched():
@@ -166,3 +166,18 @@ def test_same_signature_confirmation_only_adds_mode_to_independent_result():
         key.remove(key.find('mode'))
     assert ET.tostring(before) == ET.tostring(after)
     assert b'<mode>' not in original
+
+
+def test_same_key_down_lowers_octave_without_respelling_or_changing_links():
+    original = score(-2, 'minor', 'G', 0)
+    output = transpose_concert_key(original, -2, 'down')
+    before, after = ET.fromstring(original), ET.fromstring(output)
+    assert [int(n.text) for n in after.findall('.//pitch/octave')] == [int(n.text)-1 for n in before.findall('.//pitch/octave')]
+    for n in before.findall('.//pitch/octave'): n.text = str(int(n.text)-1)
+    assert ET.tostring(after) == ET.tostring(before)
+
+
+def test_same_key_octave_underflow_is_rejected():
+    original = score().replace(b'<octave>4</octave>', b'<octave>0</octave>')
+    with pytest.raises(MusicXMLTranspositionError, match='octave range'):
+        transpose_concert_key(original, 0, 'down')

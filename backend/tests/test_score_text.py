@@ -84,14 +84,16 @@ def test_title_creation_and_deletion_are_independent(score, role, tag):
     assert tree.findtext('.//m:' + other, namespaces=NS) == ('Movement' if other == 'movement-title' else 'Work')
 
 
-def test_delete_one_words_preserves_sound_and_other_words_but_rejects_orphan_sound(score):
+def test_delete_words_preserves_sound_using_empty_anchor(score):
     service, before = score
     after = service.score_text_delete(before['id'], before['revision'], 'w-1')
     saved = xml(service, after)
     assert ET.fromstring(saved).find('.//m:sound', NS).get('tempo') == '96'
-    with pytest.raises(ReviewError, match='shares a direction'):
-        service.score_text_delete(after['id'], after['revision'], 'w-2')
-    assert xml(service, after) == saved
+    final=service.score_text_delete(after['id'], after['revision'], 'w-2')
+    root=ET.fromstring(xml(service,final))
+    assert root.find('.//m:sound',NS).get('tempo')=='96'
+    assert all(not node.text for node in root.findall('.//m:direction-type/m:words',NS))
+    assert root.find('.//m:direction-type/m:words',NS) is not None
 
 
 def test_invalid_requests_are_atomic(score):

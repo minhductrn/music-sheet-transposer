@@ -248,3 +248,31 @@ def test_po_sample_tenor_readable_register_preserves_every_lyric_tie_and_note_id
         assert [ET.tostring(n) for n in before.iter(tag)]==[ET.tostring(n) for n in after.iter(tag)]
     assert [n.get('id') for n in before.iter('note')]==[n.get('id') for n in after.iter('note')]
     assert Path(path).read_bytes()==raw
+
+
+@pytest.mark.parametrize('instrument,direction,offset,fifths',[('alto','up',9,3),('alto','down',-3,3),('soprano','up',2,2),('tenor','down',2,2)])
+def test_missing_initial_key_requires_user_declaration_before_sax(instrument,direction,offset,fifths):
+    initial=b'<key><fifths>-1</fifths><mode>major</mode></key>'
+    original=XML.replace(initial,b'')
+    with pytest.raises(MusicXMLTranspositionError,match='Confirm the original Concert key'):
+        instrument_score(original,instrument,direction)
+    saved=original.replace(b'<divisions>6</divisions>',b'<divisions>6</divisions><key><fifths>0</fifths><mode>minor</mode></key>',1)
+    output=instrument_score(saved,instrument,direction)
+    root=ET.fromstring(output)
+    assert root.findtext('.//measure/attributes/key/fifths')==str(fifths)
+    assert root.findtext('.//measure/attributes/key/mode')=='minor'
+    assert midi(output)==[pitch+offset for pitch in midi(saved)]
+    assert ET.fromstring(original).find('.//key') is None
+
+
+@pytest.mark.parametrize('direction,shift,octave',[('up',9,5),('down',-3,4)])
+def test_alto_a_major_section_is_f_sharp_major_with_matching_note_spellings(direction,shift,octave):
+    original=XML.replace(b'<fifths>-1</fifths>',b'<fifths>3</fifths>').replace(b'<step>F</step>',b'<step>A</step>').replace(b'<step>G</step>',b'<step>C</step><alter>1</alter>')
+    output=instrument_score(original,'alto',direction)
+    root=ET.fromstring(output)
+    assert root.findtext('.//key/fifths')=='6'
+    assert root.findtext('.//key/mode')=='major'
+    notes=root.findall('.//note/pitch')
+    assert (notes[0].findtext('step'),notes[0].findtext('alter'),notes[0].findtext('octave'))==('F','1',str(octave))
+    assert (notes[1].findtext('step'),notes[1].findtext('alter'))==('A','1')
+    assert midi(output)==[value+shift for value in midi(original)]

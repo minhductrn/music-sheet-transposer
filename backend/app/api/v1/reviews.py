@@ -10,7 +10,7 @@ from starlette.concurrency import run_in_threadpool
 from app.core.config import settings
 from app.music.review.document import ReviewError
 from app.music.review.models import (
-    SlurEdit, TripletReplacement, TripletSelection, TripletEdit, EventAdd, EventMove, EventPatch, HarmonyAdd, HarmonyPatch, LyricAdd, LyricMove, ReviewTranspose, ScoreTextAdd, SourceConfirmation, TextPatch, VerifyRequest,
+    EventsDelete, HarmonyMove, TextToLyrics, NotationEdit, SlurEdit, TripletReplacement, TripletSelection, TripletEdit, EventAdd, EventMove, EventPatch, HarmonyAdd, HarmonyPatch, LyricAdd, LyricMove, ReviewTranspose, ScoreTextAdd, SourceConfirmation, TextPatch, VerifyRequest,
 )
 from app.music.review.service import ReviewService
 from app.music.review.storage import MemoryReviewStore
@@ -80,6 +80,11 @@ async def create_review(
 @router.get("/{review_id}")
 async def get_review(review_id: str, service: ReviewService = Depends(get_review_service)):
     return await response(await call(service.get, review_id))
+
+
+@router.post("/{review_id}/keepalive")
+async def keepalive_review(review_id: str, service: ReviewService = Depends(get_review_service)):
+    return JSONResponse(await call(service.keepalive, review_id), headers={"Cache-Control": "no-store"})
 
 
 @router.delete("/{review_id}", status_code=204)
@@ -281,3 +286,46 @@ async def move_note(review_id: str, event_id: str, request: EventMove, revision:
 async def edit_slur(review_id: str, request: SlurEdit, revision: int = Depends(expected_revision),
                     service: ReviewService = Depends(get_review_service)):
     return await response(await call(service.slur_edit, review_id, revision, request))
+
+
+@router.post("/{review_id}/document-correction")
+async def correct_review_document(review_id: str, musicxml: UploadFile = File(...),
+                                  revision: int = Depends(expected_revision),
+                                  service: ReviewService = Depends(get_review_service)):
+    try:
+        contents = await read_upload(musicxml, service.config.recognition_max_output_bytes)
+        return await response(await call(service.document_correction, review_id, revision, contents))
+    finally:
+        await musicxml.close()
+
+
+@router.post("/{review_id}/events/{event_id}/notation")
+async def edit_notation(review_id: str, event_id: str, request: NotationEdit,
+                        revision: int = Depends(expected_revision),
+                        service: ReviewService = Depends(get_review_service)):
+    return await response(await call(service.notation_edit, review_id, revision, event_id, request))
+
+
+@router.post("/{review_id}/texts/{text_id}/to-lyrics")
+async def text_to_lyrics(review_id: str, text_id: str, request: TextToLyrics,
+                         revision: int = Depends(expected_revision),
+                         service: ReviewService = Depends(get_review_service)):
+    return await response(await call(service.text_to_lyrics, review_id, revision, text_id, request))
+
+
+@router.delete("/{review_id}/marks/{mark_id}")
+async def delete_omr_mark(review_id: str, mark_id: str, revision: int = Depends(expected_revision), service: ReviewService = Depends(get_review_service)):
+    return await response(await call(service.mark_delete, review_id, revision, mark_id))
+
+@router.delete("/{review_id}/harmonies/{harmony_id}")
+async def delete_harmony(review_id: str, harmony_id: str, revision: int = Depends(expected_revision), service: ReviewService = Depends(get_review_service)):
+    return await response(await call(service.harmony_delete, review_id, revision, harmony_id))
+
+@router.post("/{review_id}/harmonies/{harmony_id}/move")
+async def move_harmony(review_id: str, harmony_id: str, request: HarmonyMove, revision: int = Depends(expected_revision), service: ReviewService = Depends(get_review_service)):
+    return await response(await call(service.harmony_move, review_id, revision, harmony_id, request))
+
+
+@router.post("/{review_id}/events/delete-selection")
+async def delete_selection(review_id: str, request: EventsDelete, revision: int = Depends(expected_revision), service: ReviewService = Depends(get_review_service)):
+    return await response(await call(service.events_delete, review_id, revision, request.event_ids))

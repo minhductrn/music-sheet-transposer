@@ -53,19 +53,37 @@ def _percussion_parts(document):
     return result
 
 
-def _source(document):
+def _source(document, confirmed_key=None, allow_key_changes=False):
     percussion = _percussion_parts(document)
     parts = [p for p in _children(document.documentElement, "part")
              if p.getAttribute("id") not in percussion]
     signatures = set()
     modes = set()
+    initial_signatures = set()
+    initial_modes = set()
     keys = []
     for part in parts:
         measures = _children(part, "measure")
         initial = [k for a in _children(measures[0], "attributes")
                    for k in _children(a, "key")] if measures else []
         if not initial:
-            raise MusicXMLTranspositionError("The source key is missing. Save a score with an explicit major or minor key first.")
+            if confirmed_key is None or not measures:
+                raise MusicXMLTranspositionError("The source key is missing. Save a score with an explicit major or minor key first.")
+            fifths_value, mode_value = confirmed_key
+            if not -7 <= fifths_value <= 7 or mode_value not in ("major", "minor"):
+                raise MusicXMLTranspositionError("Confirm a traditional Source Key before transposing.")
+            measure=measures[0]
+            attributes=_child(measure,"attributes")
+            prefix=f"{measure.prefix}:" if measure.prefix else ""
+            def element(name):return document.createElementNS(measure.namespaceURI,prefix+name)
+            if attributes is None:
+                attributes=element("attributes");measure.insertBefore(attributes,measure.firstChild)
+            key=element("key");fifths=element("fifths");fifths.appendChild(document.createTextNode(str(fifths_value)));key.appendChild(fifths)
+            mode=element("mode");mode.appendChild(document.createTextNode(mode_value));key.appendChild(mode)
+            before=next((n for n in attributes.childNodes if n.nodeType==n.ELEMENT_NODE and n.localName!="divisions"),None)
+            attributes.insertBefore(key,before);initial=[key]
+        initial_signatures.update(int(_text(_child(k,"fifths"))) for k in initial if _child(k,"fifths") is not None)
+        initial_modes.update(_text(_child(k,"mode")) for k in initial if _child(k,"mode") is not None)
         if all(k.hasAttribute("number") for k in initial):
             staffs = {_text(s) if s is not None else "1" for m in measures for n in _children(m, "note")
                       if _child(n, "pitch") is not None for s in [_child(n, "staff")]}
@@ -89,7 +107,7 @@ def _source(document):
                     if mode is not None:
                         modes.add(_text(mode))
                     keys.append(key)
-    if len(signatures) != 1 or len(modes) > 1:
+    if (confirmed_key is None and not allow_key_changes and (len(signatures) != 1 or len(modes) > 1)) or len(initial_signatures)!=1 or len(initial_modes)>1:
         raise MusicXMLTranspositionError("Key changes or conflicting part/staff keys are not supported by Concert Transpose.")
     # This operation accepts concert-pitch scores only, not written instrument scores.
     for transposition in _elements(document, "transpose"):
@@ -106,7 +124,7 @@ def _source(document):
     if any(e.hasAttribute("smufl") or e.hasAttribute("text")
            for name in ("accidental", "root-alter", "bass-alter") for e in _elements(document, name)):
         raise MusicXMLTranspositionError("Custom accidental display overrides cannot be transposed safely.")
-    return (next(iter(signatures)), next(iter(modes), None)), parts, keys
+    return (next(iter(initial_signatures)), next(iter(initial_modes), None)), parts, keys
 
 
 def _check_integrity(contents):
@@ -126,7 +144,7 @@ def _check_integrity(contents):
 
 def concert_key_info(contents: bytes) -> dict:
     with _document(contents) as document:
-        (fifths, mode), _, _ = _source(document)
+        (fifths, mode), _, _ = _source(document, allow_key_changes=True)
         _check_integrity(contents)
         candidates = [{"fifths": fifths, "mode": candidate} for candidate in ("major", "minor")]
         return {"fifths": fifths, "mode": mode, "candidates": candidates,
@@ -196,7 +214,8 @@ def transpose_concert_key(contents: bytes, target_fifths: int, direction: str, *
     if not -7 <= target_fifths <= 7 or direction not in ("up", "down"):
         raise MusicXMLTranspositionError("Choose a supported target key and Up or Down interval.")
     with _document(contents) as document:
-        (detected_fifths, declared_mode), parts, keys = _source(document)
+        before_confirmation=document.toxml()
+        (detected_fifths, declared_mode), parts, keys = _source(document, (source_fifths,source_mode) if source_fifths is not None and source_mode in ("major","minor") else None)
         if source_fifths is not None and source_fifths != detected_fifths:
             raise MusicXMLTranspositionError("The confirmed Source Key is incompatible with the score's key signature. Choose a compatible major or minor key.")
         source_fifths = detected_fifths
@@ -204,18 +223,38 @@ def transpose_concert_key(contents: bytes, target_fifths: int, direction: str, *
         if mode not in ("major", "minor"):
             raise MusicXMLTranspositionError("Select and confirm a major or minor Source Key before transposing; its mode will not be guessed.")
         _check_integrity(contents)
-        if source_fifths == target_fifths and all(
-                _child(key, "mode") is not None and _text(_child(key, "mode")) == mode for key in keys):
+        # Same-key Down is an explicit register change; preserve all spelling and harmony.
+        if source_fifths == target_fifths and direction == "down":
+            for part in parts:
+                for measure in _children(part, "measure"):
+                    for note in _children(measure, "note"):
+                        pitch = _child(note, "pitch")
+                        if pitch is None or _child(note, "unpitched") is not None or _child(note, "rest") is not None:
+                            continue
+                        octave = _child(pitch, "octave")
+                        if octave is None or int(_text(octave)) < 1:
+                            raise MusicXMLTranspositionError("Lowering one octave exceeds the MusicXML octave range; no score was changed.")
+                        _set_text(octave, int(_text(octave)) - 1)
+            output = document.toxml(encoding="utf-8")
+            _check_integrity(output)
+            return output
+        initial_keys={k for part in parts for measure in _children(part,"measure")[:1] for attributes in _children(measure,"attributes") for k in _children(attributes,"key")}
+        if source_fifths==target_fifths and document.toxml()==before_confirmation and all(_child(k,"mode") is not None and _text(_child(k,"mode"))==mode for k in initial_keys):
             return contents
         chromatic, diatonic = _interval(source_fifths, target_fifths, mode, direction)
+        delta=target_fifths-source_fifths
         for key in keys:
-            _set_text(_child(key, "fifths"), target_fifths)
-            mode_element = _child(key, "mode")
-            if mode_element is None:
-                prefix = f"{key.prefix}:" if key.prefix else ""
-                mode_element = document.createElementNS(key.namespaceURI, prefix + "mode")
-                key.insertBefore(mode_element, _child(key, "fifths").nextSibling)
-            _set_text(mode_element, mode)
+            new_fifths=int(_text(_child(key,"fifths")))+delta
+            if not -7<=new_fifths<=7:
+                raise MusicXMLTranspositionError("A transposed key change exceeds seven sharps/flats; choose another target spelling.")
+            _set_text(_child(key,"fifths"),new_fifths)
+            if key in initial_keys:
+                mode_element = _child(key, "mode")
+                if mode_element is None:
+                    prefix = f"{key.prefix}:" if key.prefix else ""
+                    mode_element = document.createElementNS(key.namespaceURI, prefix + "mode")
+                    key.insertBefore(mode_element, _child(key, "fifths").nextSibling)
+                _set_text(mode_element, mode)
             cancel = _child(key, "cancel")
             if cancel is not None:
                 value = int(_text(cancel)) + target_fifths - source_fifths

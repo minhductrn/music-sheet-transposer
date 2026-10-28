@@ -130,6 +130,7 @@ class EventPatch(Request):
     staff: StrictInt | None = Field(default=None, ge=1, le=128)
     display_size: Literal["normal", "small", "cue"] | None = None
     grace: StrictBool | None = None
+    grace_slash: StrictBool | None = None
 
 
 class EventAdd(Request):
@@ -148,6 +149,7 @@ class EventAdd(Request):
     staff: StrictInt | None = Field(default=None, ge=1, le=128)
     display_size: Literal["normal", "small", "cue"] = "normal"
     grace: StrictBool = False
+    grace_slash: StrictBool | None = None
 
 
 class TripletSelection(Request):
@@ -155,6 +157,8 @@ class TripletSelection(Request):
 
 
 class TripletEdit(Request):
+    actual_notes: StrictInt = Field(default=3, ge=2, le=16)
+    normal_notes: StrictInt = Field(default=2, ge=1, le=16)
     measure_id: str = Field(min_length=1, max_length=128)
     voice: str = Field(min_length=1, max_length=32, pattern=r"^\S+$")
     staff: StrictInt = Field(ge=1, le=128)
@@ -162,19 +166,19 @@ class TripletEdit(Request):
     pattern: Literal['equal', 'quarter-eighth'] = 'equal'
     member_counts: tuple[Literal[1, 2], Literal[1, 2]] = (2, 2)
     onset: str | None = Field(default=None, max_length=32)
-    pitches: list[PitchInput] = Field(default_factory=list, max_length=4)
-    event_ids: list[str] = Field(default_factory=list, max_length=4)
+    pitches: list[PitchInput] = Field(default_factory=list, max_length=16)
+    event_ids: list[str] = Field(default_factory=list, max_length=16)
 
     @model_validator(mode="after")
     def explicit_group(self):
         mixed = self.pattern == 'quarter-eighth'
-        if mixed and self.base_duration != '1':
+        if mixed and (self.base_duration != '1' or self.actual_notes != 3 or self.normal_notes != 2):
             raise ValueError('The mixed triplet pattern uses written quarter then eighth values.')
         if self.event_ids:
-            valid_count = 2 <= len(self.event_ids) <= 4 if mixed else len(self.event_ids) == 3
+            valid_count = 2 <= len(self.event_ids) <= 4 if mixed else len(self.event_ids) == self.actual_notes
             if not valid_count or self.pitches or self.onset is not None:
                 raise ValueError('Choose the complete existing rhythmic group or an explicit insertion location and pitches.')
-        elif len(self.pitches) != (sum(self.member_counts) if mixed else 3) or self.onset is None:
+        elif len(self.pitches) != (sum(self.member_counts) if mixed else self.actual_notes) or self.onset is None:
             raise ValueError('Choose every pitch required by the selected triplet structure and an onset.')
         return self
 
@@ -242,6 +246,7 @@ class VerifyRequest(Request):
 
 
 class HarmonyAdd(HarmonyPatch):
+    onset: str | None = Field(default=None,max_length=32)
     measure_id: str = Field(max_length=128)
     before_event_id: str | None = Field(default=None, max_length=128)
     root_step: Literal["A", "B", "C", "D", "E", "F", "G"] = "C"
@@ -275,3 +280,29 @@ class SlurEdit(Request):
     target_event_id: str = Field(min_length=1, max_length=128)
     direction: Literal["up", "down"] = "up"
     remove: StrictBool = False
+
+
+class NotationEdit(Request):
+    field: Literal['articulation', 'fermata', 'dynamic']
+    value: str = Field(max_length=32)
+    remove: StrictBool = False
+
+
+class TextLyricMapping(Request):
+    event_id: str = Field(min_length=1, max_length=128)
+    number: str = Field(default="1", min_length=1, max_length=16)
+    text: str = Field(min_length=1, max_length=2000)
+
+class TextToLyrics(Request):
+    mappings: list[TextLyricMapping] = Field(min_length=1, max_length=128)
+    remove_source: StrictBool = False
+
+
+class HarmonyMove(Request):
+    onset: str | None = Field(default=None,max_length=32)
+    measure_id: str = Field(min_length=1,max_length=128)
+    before_event_id: str | None = Field(default=None,min_length=1,max_length=128)
+
+
+class EventsDelete(Request):
+    event_ids: list[str] = Field(min_length=1, max_length=4096)

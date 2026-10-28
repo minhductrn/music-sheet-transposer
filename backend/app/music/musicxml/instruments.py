@@ -22,13 +22,21 @@ def instrument_score(contents: bytes, instrument: str, direction: str = "up") ->
             raise MusicXMLTranspositionError("This is already a written instrument score; open its concert source.")
     if any(doc.child(n, 'unpitched') is not None for n in doc.root.iter(doc.namespace + 'note')):
         raise MusicXMLTranspositionError("Unpitched percussion cannot become a Sax score.")
+    first=doc.children(parts[0],'measure')
+    initial=[]
+    if first:
+        for node in first[0]:
+            if node.tag in {doc.namespace+t for t in ('note','forward','backup')}:break
+            if node.tag==doc.namespace+'attributes':initial.extend(doc.children(node,'key'))
+    if not initial:
+        raise MusicXMLTranspositionError('Confirm the original Concert key and save MusicXML before generating an instrument score; the initial key signature is missing.')
     offset, diatonic, chromatic, octave, name, program = INSTRUMENTS[instrument]
     if direction not in ('up','down'): raise MusicXMLTranspositionError('Choose Up or Down.')
     standard_offset=offset
     # Down is exactly one octave below the standard written part, including Tenor.
     offset=offset if direction=='up' else offset-12
     written_diatonic=-diatonic-7*octave-7*((standard_offset-offset)//12)
-    transposed = transpose_musicxml_document(contents, offset)
+    transposed = transpose_musicxml_document(contents, offset, fifths_delta=3 if instrument=='alto' else 2)
     with _document(transposed) as dom:
         for harmony in _elements(dom, 'harmony'):
             roots = [n for n in harmony.childNodes if getattr(n, 'localName', None) == 'root']

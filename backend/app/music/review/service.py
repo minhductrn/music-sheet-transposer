@@ -88,6 +88,8 @@ class ReviewService:
         from .structure import source_layout
         source_layout(score, session.source_evidence)
         projected = asdict(score)
+        from .omr_marks import marks
+        projected["omr_marks"] = [{**mark,"id":f"{session.revision}|{mark['id']}"} for mark in marks(session.document)]
         from .ties import tie_info
         relationships = tie_info(session.document, score)
         for part in projected["parts"]:
@@ -126,7 +128,7 @@ class ReviewService:
                                     written = Fraction(base) * factor
                                     effective = written * ratio
                                     try:
-                                        duration_patch(session.document, deepcopy(node), str(effective), event["divisions"])
+                                        duration_patch(session.document, deepcopy(node), str(effective), str(Fraction(event["divisions"]) * (effective * Fraction(event["divisions"])).denominator))
                                     except ReviewError:
                                         continue
                                     palette[str(written)] = str(effective)
@@ -189,6 +191,14 @@ class ReviewService:
         with self.store.lock:
             return self.payload(self.store.get(identifier))
 
+    def keepalive(self, identifier):
+        """Renew an existing open editor; never resurrect expired data or change history."""
+        with self.store.lock:
+            session = self.store.get(identifier)
+            renewed = replace(session, expires_at=self.clock() + self.config.review_lifetime_seconds)
+            self.store.put(renewed)
+            return {"id": renewed.id, "expires_at": renewed.expires_at}
+
     def _session(self, identifier, revision):
         session = self.store.get(identifier)
         if revision != session.revision:
@@ -222,8 +232,53 @@ class ReviewService:
             self.store.put(updated)  # Commit only after the edit, projection and quotas succeed.
             return payload
 
+    def document_correction(self, identifier, revision, contents):
+        """Keep source/history/sidecars for explicit beam, meter and key edits.
+
+        Existing identity-bearing elements must retain order and count. Appending
+        empty measures is allowed; note insertion/deletion uses event commands.
+        """
+        if not contents or len(contents) > self.config.recognition_max_output_bytes:
+            raise ReviewError("Correction exceeds the MusicXML size limit.", 413)
+        parsed = Document.parse(contents, self.config.review_max_xml_nodes)
+        from .document import local
+        def operation(doc, sequence):
+            old_nodes = list(doc.root.iter())
+            new_nodes = list(parsed.root.iter())
+            mapping = {}
+            for tag in ("part", "measure", "note", "lyric", "harmony", "credit-words", "work-title", "movement-title", "creator", "words"):
+                old = [n for n in old_nodes if local(n.tag) == tag]
+                new = [n for n in new_nodes if local(n.tag) == tag]
+                if len(new) != len(old) and not (tag == "measure" and len(new) > len(old)):
+                    raise ReviewError("Use the event or text tools to add/remove score objects; document correction preserves their identities.")
+                mapping.update(zip(old, new))
+            # Notes must keep their original measure membership. No silent ID reassignment.
+            for node in [n for n in old_nodes if local(n.tag) == "note"]:
+                if mapping.get(doc.parent(node)) is not parsed.parent(mapping[node]):
+                    raise ReviewError("Document correction cannot move notes between measures.")
+            refs = {key: mapping[node] for key, node in doc.refs.items() if node in mapping}
+            assigned = set(refs.values())
+            for i, node in enumerate(n for n in new_nodes if local(n.tag) == "measure" and n not in assigned):
+                refs[f"{sequence}-measure-{i}"] = node
+            doc.root, doc.refs = parsed.root, refs
+            doc.changed = True
+            for decision in doc.source_confirmations.values():
+                decision["invalidated_revision"] = revision + 1
+        return self.edit(identifier, revision, operation)
+
     def event_patch(self, identifier, revision, event_id, patch: EventPatch):
         def operation(doc, _):
+            if patch.duration is not None:
+                from .patcher import context
+                from .triplets import refine_divisions
+                measure, event = context(doc, doc.get(event_id, "note"))
+                from .importer import rational
+                requested = rational(patch.duration)
+                if event.divisions and requested is not None and 0 < requested <= 1024:
+                    scale = Fraction(event.divisions)
+                    factor = (requested * scale).denominator
+                    if factor > 1:
+                        refine_divisions(doc, doc.get(event.measure_id, "measure"), scale, factor)
             members = group(doc, doc.get(event_id, "note"))
             if patch_event(doc, event_id, patch) is False:
                 return False
@@ -271,12 +326,99 @@ class ReviewService:
         from .triplets import triplet
         return self.edit(identifier, revision, lambda doc, new_id: triplet(doc, new_id, request))
 
+    def notation_edit(self, identifier, revision, event_id, request):
+        def operation(doc, _):
+            note = doc.get(event_id, "note")
+            allowed = {"articulation": {"staccato", "tenuto", "accent", "strong-accent", "staccatissimo", "breath-mark"},
+                       "fermata": {"normal", "angled", "square"},
+                       "dynamic": {"ppp", "pp", "p", "mp", "mf", "f", "ff", "fff", "sfz"}}
+            if request.value not in allowed[request.field]:
+                raise ReviewError("Choose a supported notation value.")
+            if request.field == "dynamic":
+                measure = doc.parent(note)
+                from .patcher import context
+                _, event = context(doc, note)
+                # Only directions at this exact stream position and owner are eligible.
+                for sibling in reversed(list(measure)[:list(measure).index(note)]):
+                    from .document import local
+                    if local(sibling.tag) in ("note", "backup", "forward"):
+                        break
+                    if local(sibling.tag) != "direction" or doc.child(sibling, "offset") is not None:
+                        continue
+                    if doc.text(sibling, "voice", event.voice) != event.voice or doc.text(sibling, "staff", str(event.staff)) != str(event.staff):
+                        continue
+                    for kind in doc.children(sibling, "direction-type"):
+                        for dynamic in doc.children(kind, "dynamics"):
+                            for marking in list(dynamic):
+                                if not request.remove or local(marking.tag) == request.value:
+                                    dynamic.remove(marking)
+                            if not len(dynamic):
+                                kind.remove(dynamic)
+                        if not len(kind):
+                            sibling.remove(kind)
+                    if not doc.children(sibling, "direction-type"):
+                        measure.remove(sibling)
+                if not request.remove:
+                    direction = ET.Element(doc.namespace + "direction")
+                    kind = ET.SubElement(direction, doc.namespace + "direction-type")
+                    dynamic = ET.SubElement(kind, doc.namespace + "dynamics")
+                    ET.SubElement(dynamic, doc.namespace + request.value)
+                    ET.SubElement(direction, doc.namespace + "voice").text = event.voice
+                    ET.SubElement(direction, doc.namespace + "staff").text = str(event.staff)
+                    measure.insert(list(measure).index(note), direction)
+            else:
+                notations = doc.child(note, "notations")
+                if notations is None:
+                    notations = put(doc, note, "notations")
+                if request.field == "fermata":
+                    for existing in doc.children(notations, "fermata"):
+                        notations.remove(existing)
+                    if not request.remove:
+                        ET.SubElement(notations, doc.namespace + "fermata").text = request.value
+                else:
+                    articulations = doc.child(notations, "articulations")
+                    if articulations is None:
+                        articulations = ET.SubElement(notations, doc.namespace + "articulations")
+                    for existing in doc.children(articulations, request.value):
+                        articulations.remove(existing)
+                    if not request.remove:
+                        ET.SubElement(articulations, doc.namespace + request.value)
+            doc.manual_changes[event_id] = sorted(set(doc.manual_changes.get(event_id, [])) | {request.field})
+            doc.changed = True
+        return self.edit(identifier, revision, operation)
+
     def event_add(self, identifier, revision, request: EventAdd):
         def operation(doc, new_id):
+            from .patcher import position_context
+            from .triplets import refine_divisions
+            info, _, scale = position_context(doc, request.measure_id)
+            from .importer import rational
+            duration = rational(request.duration)
+            factor = (duration * scale).denominator if duration is not None and 0 < duration <= 1024 else 1
+            if factor > 1:
+                refine_divisions(doc, doc.get(request.measure_id, "measure"), scale, factor)
             add_event(doc, new_id, request)
             doc.manual_changes[new_id] = ["addition", "tie_start"] if request.tie_to_event_id else ["addition"]
             doc.manual_changes[request.measure_id] = ["events"]
         return self.edit(identifier, revision, operation)
+
+    def events_delete(self, identifier, revision, event_ids):
+        def operation(doc, _):
+            ids=set(event_ids)
+            if len(ids)!=len(event_ids):
+                raise ReviewError("Select each note only once.")
+            nodes={doc.get(key,"note"):key for key in ids}
+            # Remove chord followers before their advancing head, in one history entry.
+            ordered=[nodes[node] for node in doc.root.iter() if node in nodes]
+            from .slurs import disconnect_deleted
+            for key in reversed(ordered):
+                parent=doc.parent(doc.get(key,"note"))
+                mid=next(k for k,v in doc.refs.items() if v is parent)
+                disconnect_deleted(doc,key)
+                delete_preserving_timing(doc,key)
+                doc.manual_changes[key]=["deletion"]
+                doc.manual_changes[mid]=["events"]
+        return self.edit(identifier,revision,operation)
 
     def event_delete(self, identifier, revision, event_id, preserve_timing=False):
         def operation(doc, _):
@@ -346,6 +488,30 @@ class ReviewService:
             doc.changed = True
         return self.edit(identifier, revision, operation)
 
+    def text_to_lyrics(self, identifier, revision, text_id, request):
+        def operation(doc, new_id):
+            source = doc.get(text_id, "words")
+            seen = set()
+            for index, mapping in enumerate(request.mappings):
+                note = doc.get(mapping.event_id, "note")
+                if doc.child(note, "pitch") is None:
+                    raise ReviewError("Lyrics must be assigned to an explicitly selected pitched note.")
+                owner = (mapping.event_id, mapping.number)
+                if owner in seen or any(l.get("number", "1") == mapping.number for l in doc.children(note, "lyric")):
+                    raise ReviewError("This note/verse already has lyrics; edit or move that lyric explicitly.")
+                seen.add(owner)
+                lyric = ET.Element(doc.namespace + "lyric", {"number": mapping.number})
+                put(doc, lyric, "text", mapping.text)
+                index_in_note = next((i for i, c in enumerate(note) if c.tag in (doc.namespace + "play", doc.namespace + "listen")), len(note))
+                note.insert(index_in_note, lyric)
+                doc.refs[f"{new_id}-lyric-{index}"] = lyric
+                doc.manual_changes[mapping.event_id] = sorted(set(doc.manual_changes.get(mapping.event_id, [])) | {"lyrics"})
+            if request.remove_source:
+                from .score_text import delete_text
+                delete_text(doc, text_id)
+            doc.changed = True
+        return self.edit(identifier, revision, operation)
+
     def lyric_add(self, identifier, revision, event_id, request: LyricAdd):
         def operation(doc, new_id):
             note = doc.get(event_id, "note")
@@ -361,21 +527,63 @@ class ReviewService:
             doc.changed = True
         return self.edit(identifier, revision, operation)
 
+    def mark_delete(self, identifier, revision, mark_id):
+        from .omr_marks import delete_mark
+        prefix, separator, mark = mark_id.partition("|")
+        if not separator or prefix != str(revision):
+            raise ReviewError("The selected mark belongs to an older revision. Select it again.",409)
+        return self.edit(identifier, revision, lambda doc, _: delete_mark(doc, mark))
+
+    def harmony_delete(self, identifier, revision, harmony_id):
+        def operation(doc, _):
+            node=doc.get(harmony_id,"harmony")
+            doc.parent(node).remove(node)
+            del doc.refs[harmony_id]
+            doc.changed=True
+        return self.edit(identifier, revision, operation)
+
+    def harmony_position(self, doc, node, measure, before_event_id, onset):
+        if onset is not None:
+            if before_event_id:
+                raise ReviewError("Choose a note anchor or a beat position, not both.")
+            from .patcher import context
+            from .importer import rational
+            from .triplets import refine_divisions
+            beat=rational(onset)
+            info,_=context(doc,measure_id=next(k for k,v in doc.refs.items() if v is measure))
+            scale=rational(info.divisions)
+            if beat is None or beat<0 or beat>1024 or scale is None or scale<=0:
+                raise ReviewError("Choose a nonnegative beat position and a measure with known divisions.")
+            scale=refine_divisions(doc,measure,scale,(beat*scale).denominator)
+            for offset in doc.children(node,"offset"):node.remove(offset)
+            offset=ET.SubElement(node,doc.namespace+"offset");offset.text=str(int(beat*scale))
+            # Before the first timed item: offset is measured from the bar start.
+            position=next((i for i,c in enumerate(measure) if c.tag not in (doc.namespace+"attributes",doc.namespace+"print")),len(measure))
+        else:
+            anchor=doc.get(before_event_id,"note") if before_event_id else None
+            if anchor is not None and doc.parent(anchor) is not measure:
+                raise ReviewError("Choose a note in the destination measure.")
+            for offset in doc.children(node,"offset"):node.remove(offset)
+            position=list(measure).index(group(doc,anchor)[0]) if anchor is not None else next((i for i,c in enumerate(measure) if c.tag==doc.namespace+"barline" and c.get("location","right")=="right"),len(measure))
+        measure.insert(position,node)
+
+    def harmony_move(self, identifier, revision, harmony_id, request):
+        def operation(doc, _):
+            node=doc.get(harmony_id,"harmony")
+            measure=doc.get(request.measure_id,"measure")
+            doc.parent(node).remove(node)
+            self.harmony_position(doc,node,measure,request.before_event_id,request.onset)
+            doc.changed=True
+        return self.edit(identifier, revision, operation)
+
     def harmony_patch(self, identifier, revision, harmony_id, request: HarmonyPatch):
         return self.edit(identifier, revision, lambda doc, _: patch_harmony(doc, harmony_id, request))
 
     def harmony_add(self, identifier, revision, request: HarmonyAdd):
         def operation(doc, new_id):
             measure = doc.get(request.measure_id, "measure")
-            anchor = doc.get(request.before_event_id, "note") if request.before_event_id else None
-            if anchor is not None and doc.parent(anchor) is not measure:
-                raise ReviewError("Harmony anchor must belong to the requested measure.")
             harmony = ET.Element(doc.namespace + "harmony")
-            if anchor is not None:
-                position = list(measure).index(group(doc, anchor)[0])
-            else:
-                position = next((i for i, child in enumerate(measure) if child.tag == doc.namespace + "barline" and child.get("location", "right") == "right"), len(measure))
-            measure.insert(position, harmony)
+            self.harmony_position(doc,harmony,measure,request.before_event_id,request.onset)
             doc.refs[new_id] = harmony
             patch_harmony(doc, new_id, HarmonyPatch(root_step=request.root_step, root_alter=request.root_alter,
                                                     kind=request.kind or "major", text=request.text or ""))

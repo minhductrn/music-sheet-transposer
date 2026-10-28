@@ -74,7 +74,7 @@ def test_tuplet_written_mapping_and_ratio_preservation(workflow):
     assert untouched(after) == untouched(before)
 
 
-def test_unsupported_normal_type_and_divisions_reject_atomically(workflow):
+def test_unsupported_normal_type_rejects_and_low_divisions_refine_without_moving_other_notes(workflow):
     client, _ = workflow
     modification = '<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes><normal-type>quarter</normal-type></time-modification>'
     before = create(client, source(modification=modification))
@@ -84,7 +84,13 @@ def test_unsupported_normal_type_and_divisions_reject_atomically(workflow):
     current = client.get(f'/api/v1/reviews/{before["id"]}').json()
     assert current['revision'] == before['revision'] and xml(current) == xml(before)
     low = create(client, source().replace(b'<divisions>192</divisions>', b'<divisions>1</divisions>'))
-    assert '1/16' not in event(low, 'e-1')['palette_duration_options']
+    assert event(low, 'e-1')['palette_duration_options']['1/16'] == '1/16'
     result = request(client, low, 'events/e-1', dict(duration='1/16', duration_scope='note', preserve_onsets=True), 'PATCH')
-    assert result.status_code == 422
-    assert xml(client.get(f'/api/v1/reviews/{low["id"]}').json()) == xml(low)
+    assert result.status_code == 200, result.text
+    after = result.json()
+    assert event(after, 'e-1')['duration'] == '1/16'
+    for key in ('e-2','e-3','e-4'):
+        for field in ('onset','duration','pitch','voice','staff','lyric_ids'):
+            assert event(after,key)[field] == event(low,key)[field]
+    undo = request(client,after,'undo').json()
+    assert xml(undo) == xml(low)
