@@ -7,3 +7,10 @@ export function a4Slices(width:number,height:number,breaks:number[],textBounds:{
  while(start<height-.1){const limit=Math.min(height,start+capacity);const end=height<=limit?height:safe.filter(y=>y>start+1&&y<=limit).at(-1);if(end===undefined)throw Error('A music system exceeds an A4 page; PDF was not exported to avoid clipping.');pages.push({start,end});start=end;}
  return pages;
 }
+
+// Uniform fit is explicit and works for any score length without changing notation.
+export function a4SinglePageScale(width:number,height:number){
+ if(!(Number.isFinite(width)&&Number.isFinite(height)&&width>0&&height>0))throw Error('PDF has no rendered score.');
+ const capacity=(A4.height-2*A4.margin)*width/(A4.width-2*A4.margin);
+ return Math.min(1,capacity/height);
+}

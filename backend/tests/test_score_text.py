@@ -1,3 +1,4 @@
+from test_phase4e_workflow import workflow
 """Synthetic text foundation regressions; no OMR or user artifacts."""
 from xml.etree import ElementTree as ET
 
@@ -138,3 +139,19 @@ def test_add_and_delete_history_restores_complete_text_nodes(score):
     assert xml(service, undo_add) == XML
     redo_add = service.history(before['id'], undo_add['revision'], 'redo')
     assert xml(service, redo_add) == created_xml
+
+
+def test_user_moves_measure_text_to_composer_header_atomically(workflow):
+    from test_phase4e_workflow import create, request, xml
+    from xml.etree import ElementTree as ET
+    original=b'<score-partwise><part-list><score-part id="P1"><part-name>Voice</part-name></score-part></part-list><part id="P1"><measure number="1"><attributes><divisions>1</divisions></attributes><direction><direction-type><words>Composer example</words></direction-type><sound tempo="96"/></direction><note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><type>quarter</type></note></measure></part></score-partwise>'
+    client,_=workflow;before=create(client,original);text=next(t for t in before['score']['texts'] if t['text']=='Composer example')
+    response=request(client,before,'texts/'+text['id'],{'text':text['text'],'header_role':'composer'},'PATCH')
+    assert response.status_code==200,response.text
+    after=response.json();root=ET.fromstring(xml(after))
+    assert root.findtext('./identification/creator')=='Composer example'
+    assert not root.findtext('.//words') and root.find('.//sound').get('tempo')=='96'
+    assert ET.tostring(root.find('.//note'))==ET.tostring(ET.fromstring(xml(before)).find('.//note'))
+    assert next(t for t in after['score']['texts'] if t['id']==text['id'])['role']=='composer'
+    assert xml(request(client,after,'undo').json())==xml(before)
+    assert ET.fromstring(xml(create(client,xml(after)))).findtext('./identification/creator')=='Composer example'

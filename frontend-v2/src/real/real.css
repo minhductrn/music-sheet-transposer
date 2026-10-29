@@ -33,7 +33,7 @@
 .score-tool-popover[hidden],.score-note-popover[hidden]{display:none!important}
 .score-tool-popover{position:fixed;z-index:80;right:12px;top:78px;width:min(540px,calc(100vw - 24px));max-height:calc(100vh - 100px);overflow:auto;background:white;border:1px solid #b9cfe2;box-shadow:0 8px 30px #19365030;border-radius:12px;padding:36px 12px 12px}
 .close-score-tools{position:absolute;right:8px;top:5px}.score-tool-popover .score-structure{margin-bottom:6px}
-.score-note-popover{position:fixed;z-index:75;width:min(380px,calc(100vw - 16px));max-height:min(245px,calc(100vh - 90px));overflow:auto;background:white;border:1px solid #b9cfe2;box-shadow:0 5px 20px #19365025;border-radius:10px;padding:7px}
+.score-note-popover{position:fixed;z-index:75;width:min(380px,calc(100vw - 120px));max-height:min(245px,calc(100vh - 90px));overflow:auto;background:white;border:1px solid #b9cfe2;box-shadow:0 5px 20px #19365025;border-radius:10px;padding:7px}
 .score-note-popover .note-context{padding:6px;flex-wrap:wrap}.score-note-popover>button{float:right}
 .score-object-actions{position:fixed;z-index:90;display:flex;gap:5px;background:white;border:1px solid #b9cfe2;border-radius:8px;box-shadow:0 4px 15px #19365025;padding:5px}
 
@@ -44,3 +44,12 @@
 .real-workspace .concert-panel{position:fixed;z-index:82;right:12px;top:78px;width:min(540px,calc(100vw - 24px));max-height:calc(100vh - 100px);overflow:auto;box-shadow:0 8px 30px #19365030}
 
 .concert-panel-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.concert-panel-heading button{min-width:32px;min-height:32px;padding:2px 8px;font-size:22px;line-height:1}
+
+/* Modal save decisions and tools must remain above score-object actions. */
+.score-tool-popover{z-index:95}
+.real-save-popover,.real-receipt,.instrument-editor .real-save-popover,.instrument-editor .real-receipt{z-index:100}
+
+.notice[hidden],.instrument-notice[hidden]{display:none!important}
+.notice button,.instrument-notice button{margin-left:10px;padding:0 6px;min-width:24px;color:inherit;background:transparent;border:1px solid currentColor;border-radius:4px}
+
+.notice button,.instrument-notice button{pointer-events:auto}

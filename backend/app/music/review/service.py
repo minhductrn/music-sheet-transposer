@@ -322,6 +322,10 @@ class ReviewService:
             session = self._session(identifier, revision)
             return preview_selection(session.document, revision, request.event_ids)
 
+    def tuplet_work(self, identifier, revision, request):
+        from .tuplet_work import edit_tuplet
+        return self.edit(identifier, revision, lambda doc, new_id: edit_tuplet(doc, new_id, request))
+
     def triplet_edit(self, identifier, revision, request):
         from .triplets import triplet
         return self.edit(identifier, revision, lambda doc, new_id: triplet(doc, new_id, request))
@@ -593,6 +597,9 @@ class ReviewService:
         from .score_text import patch_text
         if request.segment_index:
             raise ReviewError('Choose an independent text element; lyric segments use the lyric editor.')
+        if request.header_role:
+            from .score_text import move_text_to_header
+            return self.edit(identifier, revision, lambda doc, _: move_text_to_header(doc, text_id, request.text, request.header_role))
         return self.edit(identifier, revision, lambda doc, _: patch_text(doc, text_id, request.text))
 
     def score_text_add(self, identifier, revision, request: ScoreTextAdd):

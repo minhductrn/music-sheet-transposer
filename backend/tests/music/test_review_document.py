@@ -236,12 +236,14 @@ def test_tuplet_duration_patch_keeps_ratio_and_notations():
     assert note.find("notations/tuplet") is not None
 
 
-def test_explicit_tuplet_normal_type_is_preserved_and_duration_edit_rejected():
+def test_explicit_tuplet_normal_type_is_preserved_during_duration_edit():
     xml = b'<score-partwise><part id="P1"><measure><attributes><divisions>3</divisions></attributes><note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><type>eighth</type><time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes><normal-type>eighth</normal-type></time-modification></note></measure></part></score-partwise>'
     doc = document(xml)
-    with pytest.raises(ReviewError, match="normal-type"):
-        patch_event(doc, "e-1", EventPatch(duration="2/3"))
-    assert doc.xml() == xml
+    patch_event(doc, "e-1", EventPatch(duration="2/3"))
+    note=doc.get("e-1","note")
+    assert doc.text(note,"type")=="quarter"
+    assert doc.text(doc.child(note,"time-modification"),"normal-type")=="eighth"
+    assert doc.text(note,"duration")=="2"
 
 
 def test_tied_notation_without_sound_tie_is_exposed_in_model():

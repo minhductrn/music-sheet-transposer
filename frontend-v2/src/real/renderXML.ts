@@ -15,6 +15,14 @@ export function renderXML(xml:string){
   const key=doc.createElementNS(ns,'key'),fifths=doc.createElementNS(ns,'fifths');fifths.textContent='0';key.append(fifths);
   attributes.insertBefore(key,[...attributes.children].find(c=>c.localName!=='divisions')??null);changed=true;
  }
+ // OSMD applies cue-sized types to an entire shared chord. Visual Small is
+ // rendered per mapped head instead; preserve cue semantics and original XML.
+ for(const note of doc.getElementsByTagNameNS('*','note')){
+  const head=children(note,'notehead')[0];
+  if(!['small','x-small','xx-small'].includes(head?.getAttribute('font-size')??''))continue;
+  const type=children(note,'type')[0];if(type?.getAttribute('size')==='cue'){type.removeAttribute('size');changed=true;}
+  head.removeAttribute('font-size');changed=true;
+ }
  const result=changed?new XMLSerializer().serializeToString(doc):xml;
  // OSMD distinguishes inline XML from URLs using the XML declaration.
  return /^\s*<\?xml\b/.test(result)?result:'<?xml version="1.0" encoding="utf-8"?>\n'+result;

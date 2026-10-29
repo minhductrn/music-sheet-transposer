@@ -110,6 +110,17 @@ export function RenderedScore({ printCompact=false, review, readOnly, fitVersion
                                     const spacing = lines?.length === 5 ? (lines[4].Start.y - lines[0].Start.y) * 10 * zoom / 4 : 10 * zoom;
                                     for (const kind of ['tie', 'slur'])
                                         nativeCurves.set(matches[0].id + kind, (kind === 'tie' ? vf.getTieSVGs?.() : vf.getSlurSVGs?.()) as unknown as SVGGraphicsElement[] ?? []);
+                                    // Rest glyphs have hollow centers; provide a real hit surface
+                                    // rather than relying on SVG bounding-box pointer support.
+                                    if(note.isRest() && head instanceof SVGGraphicsElement){
+                                        const b=head.getBBox();
+                                        const hit=document.createElementNS('http://www.w3.org/2000/svg','rect');
+                                        hit.setAttribute('x',String(b.x-2));hit.setAttribute('y',String(b.y-2));hit.setAttribute('width',String(b.width+4));hit.setAttribute('height',String(b.height+4));hit.setAttribute('fill','transparent');hit.setAttribute('pointer-events','all');head.append(hit);
+                                    }
+                                    if(matches[0].display_size==='small'&&head instanceof SVGGraphicsElement){
+                                        const b=head.getBBox(),cx=b.x+b.width/2,cy=b.y+b.height/2;
+                                        head.setAttribute('transform',(head.getAttribute('transform')??'')+` translate(${cx},${cy}) scale(0.7) translate(${-cx},${-cy})`);
+                                    }
                                     head.setAttribute('data-score-event', matches[0].id);
                                     const prior = bindings.get(head);
                                     if (prior && prior.event.id !== matches[0].id) {

@@ -10,7 +10,7 @@ from starlette.concurrency import run_in_threadpool
 from app.core.config import settings
 from app.music.review.document import ReviewError
 from app.music.review.models import (
-    EventsDelete, HarmonyMove, TextToLyrics, NotationEdit, SlurEdit, TripletReplacement, TripletSelection, TripletEdit, EventAdd, EventMove, EventPatch, HarmonyAdd, HarmonyPatch, LyricAdd, LyricMove, ReviewTranspose, ScoreTextAdd, SourceConfirmation, TextPatch, VerifyRequest,
+    TupletWork, EventsDelete, HarmonyMove, TextToLyrics, NotationEdit, SlurEdit, TripletReplacement, TripletSelection, TripletEdit, EventAdd, EventMove, EventPatch, HarmonyAdd, HarmonyPatch, LyricAdd, LyricMove, ReviewTranspose, ScoreTextAdd, SourceConfirmation, TextPatch, VerifyRequest,
 )
 from app.music.review.service import ReviewService
 from app.music.review.storage import MemoryReviewStore
@@ -122,6 +122,12 @@ async def preview_triplet(review_id: str, request: TripletSelection, revision: i
                           service: ReviewService = Depends(get_review_service)):
     payload = await call(service.triplet_preview, review_id, revision, request)
     return JSONResponse(payload, headers={"Cache-Control": "no-store"})
+
+
+@router.post("/{review_id}/tuplets")
+async def edit_tuplet(review_id: str, request: TupletWork, revision: int = Depends(expected_revision),
+                      service: ReviewService = Depends(get_review_service)):
+    return await response(await call(service.tuplet_work, review_id, revision, request))
 
 
 @router.post("/{review_id}/triplets")

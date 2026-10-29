@@ -143,3 +143,18 @@ def add_text(doc, identifier, request):
     node.text = request.text
     doc.refs[identifier] = node
     doc.changed = True
+
+
+def move_text_to_header(doc, identifier, text, role):
+    from types import SimpleNamespace
+    selected = next((entry for entry in project_texts(doc) if entry['id'] == identifier), None)
+    if not selected or selected['role'] != 'direction':
+        raise ReviewError('Select a measure text to move to the page header.')
+    if role not in ('composer', 'lyricist'):
+        raise ReviewError('Unsupported header role.')
+    if any(entry['role'] == role for entry in project_texts(doc)):
+        raise ReviewError('This header already exists. Edit it instead of creating a duplicate.')
+    if not text.strip():
+        raise ReviewError('Header text cannot be empty.')
+    delete_text(doc, identifier)
+    add_text(doc, identifier, SimpleNamespace(role=role, text=text, event_id=None))

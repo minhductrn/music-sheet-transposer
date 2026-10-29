@@ -183,6 +183,16 @@ class TripletEdit(Request):
         return self
 
 
+class TupletWork(Request):
+    event_ids: list[str] = Field(min_length=1, max_length=128)
+    action: Literal['apply', 'split', 'remove'] = 'apply'
+    actual_notes: StrictInt = Field(default=3, ge=2, le=16)
+    normal_notes: StrictInt = Field(default=2, ge=1, le=16)
+    bracket: Literal['yes', 'no'] = 'yes'
+    placement: Literal['above', 'below'] = 'above'
+    show_number: Literal['actual', 'both', 'none'] = 'actual'
+
+
 class TripletReplacement(Request):
     preserve_associations: StrictBool = False
     original_member_ids: list[str] | None = Field(default=None, min_length=1, max_length=3)
@@ -200,6 +210,7 @@ class TripletReplacement(Request):
 
 
 class TextPatch(Request):
+    header_role: Literal["composer", "lyricist"] | None = None
     text: str = Field(max_length=2000)
     segment_index: StrictInt = Field(default=0, ge=0, le=100)
 

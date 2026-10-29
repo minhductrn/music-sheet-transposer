@@ -6,16 +6,24 @@ Conversation may use Vietnamese or English. Project documentation is maintained 
 
 ## Current status
 
-**The Product Owner accepted Task 04 on October 27, 2026**, within the scope and limitations documented in the [Task 04 report](frontend-v2/TASK_04_REPORT.md). The accepted application source checkpoint is [`56e798e`](https://github.com/minhductrn/music-sheet-transposer/commit/56e798ecae8ac3c17317b421f873f59db4c8cbcc).
+**The Product Owner accepted the latest editor and PDF-export additions on October 29, 2026**, including per-note Small rendering. The original Task 04 baseline was accepted on October 27, 2026 at [`56e798e`](https://github.com/minhductrn/music-sheet-transposer/commit/56e798ecae8ac3c17317b421f873f59db4c8cbcc). Scope, verification evidence and remaining limitations are recorded in the [Task 04 report](frontend-v2/TASK_04_REPORT.md).
 
 - Import real MusicXML, or recognize PDF/PNG/JPEG sources with local OMR to create an editable draft.
 - Keep Original Source read-only on the left; make user-directed corrections in Working Score on the right. Edit Only provides the same tools while hiding the original.
-- Edit supported notes, pitches, durations, accidentals, rests, augmentation dots, voices, measures, beams and tuplets; select multiple notes with the mouse.
+- Edit supported notes, pitches, durations, accidentals, rests, augmentation dots, voices, measures, beams and tuplets; select multiple notes with the mouse. Small changes only the selected notehead, including one member of a shared chord; other members retain their size. It does not change pitch, duration or voice.
 - Add and edit Unicode lyrics across verses, text, chord symbols and ties/slurs; delete supported incorrectly recognized OCR objects directly on the score.
 - Change Concert key across key changes within the piece. Declare a missing initial key when saving. **Same key + Down** lowers all pitched notes by one octave; same key + Up retains their pitch. Undo/Redo is available.
 - Generate and edit independent Alto, Soprano and Tenor scores. Readable defaults are Alto −3 semitones, Soprano +2 and Tenor +2 relative to Concert. The accepted Tenor option uses Soprano-like notation and sounds an octave below Concert when played on B♭ Tenor; it is a register choice rather than the standard Tenor +14-semitone written transposition.
-- Save and reopen MusicXML; export portrait A4 PDF with compact system, lyric and note spacing and automatic pagination for longer scores.
+- Save and reopen MusicXML. Export PDF defaults to **Fit in 1 A4 page**, uniformly scaling the complete score. Choose **Multiple A4 pages** for readable pagination of long scores. Margins remain 12 mm; automatic content-aware margins are not implemented.
 - Fit to pane width, zoom and scroll independently; return Home by saving, continuing editing or explicitly discarding unsaved changes.
+
+### Accepted editor additions
+
+- Concert and instrument Working Scores share the editing tools in Compare and Edit Only. Edit Only hides the source; the source remains read-only. Stage 2 global Undo/Redo, Validate, Save, Save As and saved MusicXML export target the active instrument score.
+- The interface uses English labels; imported lyrics and score text keep their own language. Notification messages can be dismissed with the close button.
+- **Add Chord** accepts user-directed chord entry. Select a measure-attached author text and choose **Move to composer header** to move it into page-level composer metadata. This is explicit, supports Undo, and does not automatically classify other OCR text.
+- Groups supports **3:2, 2:3, 4:3, 5:4, 6:4, 7:4, 8:6 and 9:8**. Instructions and commands follow the selected ratio. **Divide duration** preserves the selected span; **Apply to selection** scales written values by the ratio and may change the span. Select the complete group to remove its tuplet notation. Resulting pitches remain individually editable.
+- Fixed mixed quarter/eighth 3:2 and beam tools are separate from the selected ratio. Unsupported nested/cross-measure tuplets or unrepresentable written units are reported rather than silently rewritten.
 
 OMR can omit or misread notation. Users compare and correct its draft; the application does not compose missing material. The Task 04 workflow uses no AI agents, LLM API calls or Docker.
 
@@ -60,7 +68,7 @@ PDF/image recognition requires Java, Audiveris and suitable OCR language data in
 
 ## Accepted standalone bundle
 
-The accepted local archive is **`music-sheet-transposer-task04-accepted-2026-10-27.tar.gz`**. Archives and runtime files remain local; cloning GitHub does not download a prebuilt bundle.
+The historical accepted Task 04 baseline archive is **`music-sheet-transposer-task04-accepted-2026-10-27.tar.gz`**. It predates the October 29 editor additions; do not use it to verify the latest features. The latest locally tested package is **`music-sheet-transposer-small-member-v0.1.tar.gz`** (its build-time manifest predates final Product Owner acceptance). Archives and runtime files remain local; cloning GitHub does not download a prebuilt bundle.
 
 Extract the archive into a new directory and run in Ubuntu WSL:
 
@@ -112,7 +120,7 @@ cd backend
 .venv/bin/python -B -m pytest -q --ignore=tests/music/test_recognition_benchmark.py
 ```
 
-The Task 04 checkpoint recorded **1,122 backend tests passed, 3 skipped; 55 frontend unit tests passed**, with lint, type checking and build passing. Browser verification has separately documented scope. These results do not certify perfect OMR accuracy.
+The original Task 04 checkpoint recorded 1,122 backend tests passed, 3 skipped, and 55 frontend unit tests passed. The October 29 verification recorded **1,147 backend tests passed, 3 skipped; 56 frontend unit tests passed**, with lint, TypeScript and build passing. The recognition benchmark was excluded. Browser verification has separately documented scope, including skipped private-fixture cases and targeted reruns; no clean full-browser-suite result is implied. These results do not certify perfect OMR accuracy.
 
 `npm run test:e2e` uses Playwright and requires ports 5174/8812 to be available. The current configuration contains the Firefox path used on the verified WSL host; other hosts must adjust it. Some tests use unpublished private fixtures or local evidence; inspect their skip conditions and paths. Do not run tests against a session containing unsaved user edits.
 
@@ -122,7 +130,7 @@ The Task 04 checkpoint recorded **1,122 backend tests passed, 3 skipped; 55 fron
 - Encrypted PDFs are unsupported. Multiple score outputs are not automatically selected or merged.
 - Editing and tuplet coverage is bounded by the report; this is not full MuseScore/Symphony Pro parity. Stage 2 remains single-part; Add measure retains its single-part/single-staff restriction.
 - A transposed section requiring more than seven sharps/flats needs an explicitly chosen supported enharmonic spelling. Musical choices are not silently overridden.
-- Long scores still use multiple A4 pages; the exporter does not force every score onto one page.
+- Fit in 1 A4 page can make long scores very small. Choose Multiple A4 pages when readability is more important than page count. One-page fit does not repair incorrect OCR text or notation.
 - Personal PDF/MusicXML inputs, runtimes, archives and private evidence remain local and are excluded from Git. Unrelated legacy changes are preserved separately.
 
 ## Structure and governance

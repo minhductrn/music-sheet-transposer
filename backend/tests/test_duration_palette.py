@@ -76,7 +76,7 @@ def test_tuplet_written_mapping_and_ratio_preservation(workflow):
 
 def test_unsupported_normal_type_rejects_and_low_divisions_refine_without_moving_other_notes(workflow):
     client, _ = workflow
-    modification = '<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes><normal-type>quarter</normal-type></time-modification>'
+    modification = '<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes><normal-type>128th</normal-type></time-modification>'
     before = create(client, source(modification=modification))
     assert event(before, 'e-1')['palette_duration_options'] == {}
     result = request(client, before, 'events/e-1', dict(duration='1/3', duration_scope='note', preserve_onsets=True), 'PATCH')

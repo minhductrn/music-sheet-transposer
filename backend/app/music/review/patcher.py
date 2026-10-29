@@ -117,8 +117,9 @@ def duration_patch(doc, note, duration: str, divisions, grace=False):
     visual = value
     modification = doc.child(note, "time-modification")
     if modification is not None:
-        if doc.child(modification, "normal-type") is not None:
-            raise ReviewError("Duration edits to tuplets with an explicit normal-type require a notation editor.")
+        normal_type=doc.child(modification, "normal-type")
+        if normal_type is not None and doc.text(modification,"normal-type") not in {"whole","half","quarter","eighth","16th","32nd","64th"}:
+            raise ReviewError("This tuplet normal-type requires an unsupported notation value.")
         actual, normal = rational(doc.text(modification, "actual-notes")), rational(doc.text(modification, "normal-notes"))
         if not actual or not normal or actual <= 0 or normal <= 0:
             raise ReviewError("Correct this note's invalid tuplet in a notation editor before changing duration.")

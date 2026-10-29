@@ -25,7 +25,7 @@ test('PDF draft keeps source and review identity through correction, undo, sourc
  await page.getByRole('button',{name:'Save',exact:true}).click();
  await expect(page.getByRole('status').last()).toContainText('confirm comparison');
  await page.getByLabel('I compared this revision').check();
- const download=page.waitForEvent('download');await page.getByRole('button',{name:'Save',exact:true}).click();
+ const download=page.waitForEvent('download');await page.getByRole('button',{name:'Save',exact:true}).click();const keyPrompt=page.getByRole('dialog',{name:'Confirm original Concert key'});if(await keyPrompt.isVisible()){await keyPrompt.getByLabel('Original key mode').selectOption('minor');await keyPrompt.getByLabel('Original Concert key',{exact:true}).selectOption('0');await keyPrompt.getByRole('button',{name:'Confirm and save MusicXML',exact:true}).click();}
  expect((await download).suggestedFilename()).toMatch(/\.musicxml$/);
  await page.getByRole('button',{name:'I retained the downloaded file'}).click();
  await expect(page.getByText('Concert file saved',{exact:true})).toBeVisible();

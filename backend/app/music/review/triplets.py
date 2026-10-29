@@ -67,14 +67,14 @@ def triplet(doc, identifier, request):
     old_span = None
     if selected:
         if len(set(request.event_ids)) != count or any(doc.parent(n) is not measure for n in selected):
-            raise ReviewError('Choose three distinct notes in the same measure.')
+            raise ReviewError(f'Choose {count} distinct notes in the same measure.')
         indexes = [list(measure).index(n) for n in selected]
         if indexes != list(range(indexes[0], indexes[0] + count)):
-            raise ReviewError('Choose three consecutive notes in score order; intervening notation is preserved.')
+            raise ReviewError(f'Choose {count} consecutive notes in score order; intervening notation is preserved.')
         events = [context(doc, n)[1] for n in selected]
         if any(e.kind != 'note' or e.grace or e.cue or len(group(doc, n)) != 1
                or e.voice != request.voice or e.staff != request.staff for n, e in zip(selected, events)):
-            raise ReviewError('Triplet conversion requires three duration-bearing single notes in the chosen voice and staff.')
+            raise ReviewError(f'Tuplet conversion requires {count} duration-bearing single notes in the chosen voice and staff.')
         if any(doc.child(n, 'time-modification') is not None or
                any(local(v.tag) == 'tuplet' for v in n.iter()) for n in selected):
             raise ReviewError('Existing tuplet membership must not be guessed. Use explicit deletion and replacement for this group.')

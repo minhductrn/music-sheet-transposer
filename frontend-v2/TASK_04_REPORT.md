@@ -362,3 +362,101 @@ Final checkpoint checks: backend 1122 passed, 3 skipped, 2 existing dependency d
 Accepted archive: `music-sheet-transposer-task04-accepted-2026-10-27.tar.gz`. SHA-256: `d933e5e0691bc7203a991b20b925d4ac02e6b0d43e38bcbd6beeaf21951d3dd9`. Bundled runtime integrity and Python ABI check passed; all package-file and source hashes verified. Manifest marks ACCEPTED, and the guide reflects PO acceptance, current key/register behavior, direct editing and A4 export. OMR/notation exclusions documented above remain. Prior accepted Tenor archive and live user sessions are preserved.
 
 Remote master was verified at pre-Task04 checkpoint 5b1e8e44f981cf54c4d7ccf0461f10e6435f278a before committing. The resulting Git commit is the durable source checkpoint; archive is retained locally, not uploaded as private evidence.
+
+
+### 2026-10-28 — Authorized tuplet extension and instrument history fix (acceptance pending)
+
+This extension does not change the previously accepted Task 04 checkpoint. PO authorized implementation following the tuplet review, then reported global Undo unavailable after dragging a Stage 2 pitch. New work is TECHNICALLY VERIFIED within the bounded scope below; PO acceptance and commit/push remain pending. PC-02/03/05/06/07/08 apply.
+
+Implemented: 4:3 and 8:6 ratio choices; explicit division of one note/chord/rest duration; applying a ratio to contiguous written mixed-value note/chord/rest selections; editing one complete non-nested group or removing its ratio; explicit number/ratio/hidden number, bracket visibility and above/below placement. Commands reuse revision preconditions, atomic review edits, Undo/Redo and canonical MusicXML. Original event identities, pitches, accidentals, lyrics and unrelated notation are retained; only additional divided positions are explicitly created. Existing material outside the selection retains its musical onset. Supported normal-type/normal-dot metadata identifies the written tuplet unit; existing duration patching now permits supported explicit normal-type values. Unrepresentable units, partial/nested membership, unsupported values and actual collisions with unselected events are rejected atomically rather than guessed. Meter mismatch remains a Validate warning rather than automatic composition.
+
+The interface offers Divide selected duration, Apply to written selection and Remove selected tuplet under Groups. Ratios still require compatible written units; e.g. divide a quarter into 3:2 eighths, or a dotted quarter into 2:3 eighths. Mixed patterns must total a representable written unit for the chosen ratio. Cross-measure/nested tuplets remain outside scope; arbitrary custom ratios are not exposed. The older equal/mixed commands remain for regression compatibility.
+
+Instrument history: the global header Undo/Redo now delegates to the currently mounted instrument editor and reflects its history availability. The child editor retains its independent review/history. Concert history and XML are not used or changed by instrument Undo. Mounted-editor cleanup clears stale header actions when changing variants.
+
+Verification: final backend 1138 passed, 3 skipped, two preexisting dependency deprecation warnings; recognition benchmark excluded and OMR not rerun. Frontend 55 unit tests passed; lint/typecheck/build passed (existing chunk-size warning). Frozen bundle browser suite: four passed (notes, rests, instrument tuplet editing; actual mouse pitch drag plus global Undo/Redo with exact Concert XML unchanged). New API tests cover all eight offered ratios, explicit base units, rest/chord splitting, original IDs/lyrics, partial-group rejection, expansion collision, history and export/reopen.
+
+Development failures retained: initial rest mouse test timed out because hollow glyph centers lacked a reliable hit surface; transparent SVG rest hit rectangles resolved it. Initial TypeScript SVG cast was corrected with a runtime SVG type guard. Two old tests expected all explicit normal-type duration edits to be rejected; their expectations were deliberately updated for supported values, while unsupported 128th normal-type still rejects. First drag browser check attempted offscreen coordinates; scrolling the target into view resolved the test setup. A retry config initially referenced a nonexistent bundle path and was corrected. None of these intermediate failures is reported as a final PASS.
+
+Technical review: new commands validate complete ownership before editing and preserve all unrelated nodes; rational divisions refinement retains exact musical time. Only user-requested groups are changed, with no auto-filled notes/rests or new agents/technologies. The accepted archive and all 619 protected files verified unchanged. Final candidate: music-sheet-transposer-tuplets-undo-v0.1; bundled/source hashes match and ABI/integrity checks pass. Existing user app sessions are preserved. No commit/push or PO acceptance is inferred from testing.
+
+
+## 2026-10-28 — Cross-stage editor availability audit (acceptance pending)
+
+The implemented composition tools share the same RealWorkspace editor in Concert Stage 1 and the independent instrument Stage 2. Compare and Edit Only retain the same editing commands; Edit Only hides the read-only source. Source panes remain read-only.
+
+Coverage includes note/rest insertion and deletion, pitch, accidentals, duration, augmentation dots, normal/small display, grace notes, voice/staff assignment, ties/slurs, groups/tuplets, lyrics/verses, text/score marks, chord symbols, contextual structure corrections, Undo/Redo, validation, save and export. Small was verified by reduced SVG notehead width while preserving pitch and duration in all four stage/view combinations.
+
+Corrections made during this audit:
+- Global Undo/Redo, Validate, Save, Save As and saved MusicXML export delegate to the active instrument editor at Stage 2. Concert data remains unchanged.
+- Normal/Small exposes pressed state and feedback. Note popovers stay clear of the EDIT rail on narrow screens.
+- Save dialogs and additional tools render above the selected-object toolbar, which previously intercepted save confirmation and chord-update clicks.
+
+Verification evidence:
+- Backend regression: 1,138 passed, 3 skipped; recognition benchmark excluded, no OMR rerun.
+- Frontend unit tests: 55 passed. ESLint, TypeScript and production build passed. Existing large-chunk build warning remains.
+- Broad browser audit, r2: 88 passed, 7 skipped, 4 failed. Two failures were stale test assumptions (default register and explicitly confirmed initial key); two exposed overlay interference. Earlier broad-run evidence is retained.
+- Final r3 targeted browser run: 20 passed, 1 failed due to a detached notehead during initial rendering. The test now waits for the instrument editor to be ready and uses a retriable click; its targeted rerun passed. All 21 final targeted cases have passing evidence across those runs. This is not reported as a single clean 99-test run. Seven optional private-fixture cases remain skipped.
+- Protected baseline: all 619 recorded file hashes unchanged. Accepted Task 04 archive SHA-256 remains d933e5e0691bc7203a991b20b925d4ac02e6b0d43e38bcbd6beeaf21951d3dd9.
+- Candidate: music-sheet-transposer-editor-parity-v0.1-r3; packaged file integrity and source hashes verified.
+
+Limits remain shared across views: nested/cross-measure tuplets are unsupported; structural add-measure and instrument generation retain their existing part/staff restrictions. Availability of implemented tools does not claim full MuseScore feature parity. Concert key transposition is a Concert workflow action; instrument selection/direction is a Stage 2 action. Instrument PDF export is in the instrument editor toolbar.
+
+This extension and audit remain pending Product Owner acceptance. No new commit or push was performed.
+
+
+## 2026-10-28 — General PDF one-page fit (acceptance pending)
+
+Export PDF now opens a small layout dialog shared by Concert and instrument workspaces. Fit in 1 A4 page is the default for any score length. It uniformly reduces the complete notation, lyrics and marks without changing XML. Multiple A4 pages preserves the existing system-aware pagination for readability. Cancellation creates no download and no success notice.
+
+The supplied original Dieu Ran PDF has one Letter-size page (612 x 792 points); the supplied Alto export had two A4 pages, with only the final system on page two. The supplied G and Gb MusicXML files each contain 38 measures, 180 note elements and three lyric verses. Re-exported Gb Concert and Alto Down candidates each have one portrait A4 page (595.28 x 841.89 points), verified visually and by PDF inspection. Existing OCR text is retained unchanged.
+
+Verification: 56 frontend unit tests passed; lint, TypeScript/build and package integrity passed. Six PDF browser tests passed on the first candidate, covering short/long/instrument pagination and private local samples. The final candidate additionally passed both sample exports and cancellation (3 tests). All 619 protected baseline hashes remain unchanged. No backend code changed, no OMR rerun, no commit/push.
+
+Candidate: music-sheet-transposer-pdf-fit-v0.1-r2, port 5211. One-page fit may reduce text size for very long scores; users can explicitly choose multiple pages. Paper margins remain fixed at 12 mm. Automatic content-aware top/bottom/left/right margins are a proposed follow-up, not implemented or claimed in this candidate. Product Owner acceptance remains pending.
+
+
+## 2026-10-28 — English editor UI and ratio-aware tuplet instructions (acceptance pending)
+
+Add Chord remains the visible and accessible command name. Remaining Vietnamese editor UI strings were translated to English: duration labels, lyric verse controls, original-key confirmation/suggestion, Concert transposition notices, and overlapping-chord choice. Imported score text and lyrics are unchanged.
+
+The Groups explanation and divide/apply button captions now show the selected ratio. Fixed mixed quarter/eighth 3:2 and beam commands are explicitly identified as independent of that selection. Eight ratio choices were checked. Selecting a ratio configures the next command; it does not silently rewrite existing notes.
+
+Verification: ESLint, TypeScript/production build and package integrity passed. Eight targeted browser tests passed, including English duration labels, all ratio explanations/commands, note/rest/instrument tuplets, Undo/Redo, Small in both stages/views, and instrument global actions. The initial browser run had three ambiguous test locators after adding the explanation label; exact dropdown matching resolved those test-only failures. All 619 protected file hashes and packaged source hashes are unchanged/matching.
+
+Candidate: music-sheet-transposer-editor-english-v0.1, port 5213. Previous sessions remain running. No commit/push; Product Owner acceptance pending.
+
+
+## 2026-10-28 — Technical tuplet verification, dismissible notices and composer header
+
+Technical verification covers all eight exposed ratios: 3:2, 2:3, 4:3, 5:4, 6:4, 7:4, 8:6 and 9:8. Actual/normal duration semantics were checked against the W3C MusicXML 4.0 time-modification reference (https://www.w3.org/2021/06/musicxml40/musicxml-reference/elements/time-modification/). Additional parameterized tests prove splitting keeps the complete original span and each resulting pitch remains independently editable without losing its tuplet timing. Existing tests cover notes/rests/chords, exact durations, normal-type metadata, save/reopen, appearance, Undo/Redo and rejection of partial/overlapping/unsupported representations. Divide preserves the selected span; Apply scales written values by normal/actual and can change the span. Nested and cross-measure tuplets remain unsupported; not every arbitrary selected span has a representable supported written unit.
+
+Notification banners now have an accessible Dismiss notification button. The button explicitly accepts pointer events while the remaining toast remains non-intercepting. Empty notices are hidden. Initial mouse tests exposed the inherited pointer-events:none rule; the final packaged test passed after correction.
+
+The private G Dieu Ran MusicXML contains no creator metadata for its author: Lm. Bui Ninh is actually stored as direction words in measure 4. No name detection or automatic semantic rewriting was added. Users can select a direction text and choose Move to composer header from Select or Text editing. A revision-checked atomic backend operation moves that text to composer metadata, preserves independent sound information, note data and text identity, and supports Undo/save/reopen. Existing composer metadata prevents duplicate creation. The author then scales with the page but no longer follows measure reflow.
+
+Verification: 41 targeted backend tests passed (24 tuplet tests and 17 score-text tests). Eight existing targeted browser cases passed on r2; the final r3 notification/header case passed, including zoom out/in and Undo. Lint and TypeScript/build passed. All 619 protected hashes and final package/source hashes match. No source sample was modified; no OMR rerun; no commit/push. Candidate music-sheet-transposer-editor-review-v0.1-r3, port 5214; Product Owner acceptance pending.
+
+
+## 2026-10-29 — Per-note Small in shared chords (acceptance pending)
+
+The backend already stores Small on the selected XML note only, but OSMD can propagate a cue-sized type to the entire shared chord. The disposable rendering XML now suppresses that visual cue-size instruction only for notes explicitly marked Small; mapped SVG noteheads are scaled individually. Genuine cue/grace semantics and original XML are retained. Other noteheads at the same onset keep their normal size. This is a visual notehead-size correction, not a voice reassignment.
+
+Verification: production build/typecheck, lint and 56 unit tests passed. Existing single-note Small cases passed for Concert and instrument, covering Compare/Edit Only. New shared-chord cases verified the selected member shrinks, the leader's measured SVG width remains unchanged, backend display_size changes only for the selected ID, and Normal restores the member across all four stage/view combinations. The first new run hit transient null bounds during redraw; the tests now wait safely for actual rendered bounds and both targeted reruns passed. All protected baseline/source hashes checked unchanged/matching.
+
+Candidate music-sheet-transposer-small-member-v0.1, port 5216. No commit/push, acceptance pending. Chat checklist squares were static symbols, not interactive controls; acceptance can be recorded by item numbers in user replies.
+
+
+## 2026-10-29 — Product Owner acceptance and authorized GitHub checkpoint
+
+Status: **ACCEPTED** for the additional items listed in the conversation and the Small per-note correction in the tested port-5216 candidate. The Product Owner explicitly stated: “xac nhan cac hang muc tren nghiem thu”, then authorized commit/push and an English README update. Prior pending labels above describe historical candidate status and are superseded for this bounded scope by this acceptance record.
+
+Technical Lead review: the extension follows PC-02 (user-directed editing), PC-03/PC-05 (canonical persistence, export and Undo), PC-04 (independent instrument output), PC-06 (explicit musical choices), PC-07 (regression checks), and PC-08 (Product Owner acceptance). Automated verification alone was not used as acceptance. Gate 1 implementation, Gate 2 scoped automated verification, Gate 3 source/evidence review, and Gate 4 explicit Product Owner acceptance are recorded. No new production-deployment claim is made.
+
+Final checkpoint validation:
+- Backend: `.venv/bin/python -B -m pytest -q --ignore=tests/music/test_recognition_benchmark.py` — **1,147 passed, 3 skipped**, two existing dependency deprecation warnings, 133.59 seconds. OMR was not rerun.
+- Frontend: `npm run lint`, `npm test -- --run`, `npm run build` — **PASS**, 56 unit tests; TypeScript is part of the build. Existing large-chunk warning remains.
+- Browser evidence remains scoped to the audit and targeted reruns documented above; no new clean full-browser-suite result is claimed.
+- English README updated with accepted features, operation semantics, PDF choices, historical/current local package distinction and explicit limitations.
+- The 619 preexisting protected files, legacy frontend, private samples, local archives/runtimes and unrelated working changes are excluded from staging. Their hashes are checked before and after the checkpoint.
+- Commit scope is limited to the accepted backend/frontend-v2 implementation, its tests, this consolidated report and README. Existing user sessions remain running.

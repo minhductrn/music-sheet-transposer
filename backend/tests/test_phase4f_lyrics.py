@@ -149,6 +149,6 @@ def test_visual_duration_choices_use_existing_tuplet_and_divisions_rules(workflo
     client, _ = workflow
     data = BASE.replace(b'<type>half</type>', b'<type>half</type><time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes><normal-type>half</normal-type></time-modification>')
     review = create(client, data)
-    assert event(review, 'e-1')['duration_options'] == []
+    assert event(review, 'e-1')['duration_options'] == ['1/4', '1/2', '1', '2', '4']
     assert event(review, 'e-2')['duration_options'] == ['1/4', '1/2', '1', '3/2', '2', '3', '4']
     assert xml(review) == data
