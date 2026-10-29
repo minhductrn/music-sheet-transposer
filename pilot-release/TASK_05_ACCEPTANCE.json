@@ -1,0 +1,19 @@
+{
+  "task": "Task 05 — Stabilize & Release",
+  "status": "ACCEPTED",
+  "accepted_date": "2026-10-29",
+  "authority": "Product Owner",
+  "approval_evidence": "The Product Owner explicitly confirmed closing Task 05 after receiving the verified package and documentation.",
+  "version": "1.0.0-rc2",
+  "application_source_commit": "945821c55cb7760a7200329ebbea7ed79055ffd2",
+  "artifact": "music-sheet-transposer-1.0.0-rc2.tar.gz",
+  "sha256": "65e5797a6df645dbd0a3efe1a0f347dda2c4777ad1a20922994f0f1ccfbb1058",
+  "artifact_bytes": 12865109,
+  "browser_verification": {
+    "passed": 106,
+    "failed": 0,
+    "skipped": 0
+  },
+  "artifact_policy": "The accepted downloaded archive is immutable. Its build-time PENDING manifest is superseded only for this exact artifact hash by this acceptance record. Future rebuilds require separate release acceptance.",
+  "scope": "Standalone stabilization, frozen application baseline, package provenance, persistence/restart verification, English documentation. No additional composition features or production deployment."
+}

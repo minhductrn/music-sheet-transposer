@@ -27,6 +27,10 @@ Conversation may use Vietnamese or English. Project documentation is maintained 
 
 OMR can omit or misread notation. Users compare and correct its draft; the application does not compose missing material. The Task 04 workflow uses no AI agents, LLM API calls or Docker.
 
+## Release stabilization
+
+The Product Owner accepted Task 05 package **1.0.0-rc2** on **October 29, 2026**: **106 packaged browser tests passed, 0 failed, 0 skipped**, with restart/round-trip and one real OMR pipeline check completed. The [acceptance record](pilot-release/TASK_05_ACCEPTANCE.json) identifies the exact immutable archive hash. See the [Task 05 release plan and subsequent roadmap](pilot-release/TASK_05_RELEASE.md) and [English standalone guide](pilot-release/USER_GUIDE_EN.md). Existing accepted checkpoints and archives remain unchanged. The Task 05 GitHub checkpoint records this bounded release acceptance.
+
 ## Development setup
 
 Use Ubuntu WSL, Node 24 and a Python version compatible with the backend dependencies. For a new clone, prepare the backend once:
@@ -66,9 +70,9 @@ Do not use the legacy frontend's `VITE_BACKEND_URL` setting for frontend-v2.
 
 PDF/image recognition requires Java, Audiveris and suitable OCR language data installed locally. The application bundle does not include or automatically download Java, Audiveris or OCR models. Configure `AUDIVERIS_EXECUTABLE` and `AUDIVERIS_TESSDATA_PATH` as needed; see the [Task 04 guide](pilot-release/TASK_04_GUIDE_VI.md). MusicXML import and editing do not require Audiveris. Recognition does not require an online AI service once its local tools and models are available.
 
-## Accepted standalone bundle
+## Standalone bundles and release candidates
 
-The historical accepted Task 04 baseline archive is **`music-sheet-transposer-task04-accepted-2026-10-27.tar.gz`**. It predates the October 29 editor additions; do not use it to verify the latest features. The latest locally tested package is **`music-sheet-transposer-small-member-v0.1.tar.gz`** (its build-time manifest predates final Product Owner acceptance). Archives and runtime files remain local; cloning GitHub does not download a prebuilt bundle.
+The historical accepted Task 04 baseline archive is **`music-sheet-transposer-task04-accepted-2026-10-27.tar.gz`**. It predates the October 29 editor additions; do not use it to verify the latest features. The accepted Task 05 archive is **`music-sheet-transposer-1.0.0-rc2.tar.gz`**, built from accepted commit `945821c`. Its name and bytes are preserved; build-time pending metadata is superseded for its exact hash by the Task 05 acceptance record. The earlier Small-member package is retained as historical evidence. Archives and runtime files remain local; cloning GitHub does not download a prebuilt bundle.
 
 Extract the archive into a new directory and run in Ubuntu WSL:
 
@@ -81,17 +85,18 @@ Replace `/path/to/extracted-bundle` with the actual directory. Open **http://loc
 
 The bundle includes built frontend assets and Python libraries. System Python must match the ABI recorded in `manifest.json`. Node, Codex and development servers are not required at runtime. OMR still requires the local tools listed above. This is a local pilot, not a native Windows installer or production deployment.
 
-- [Current Task 04 guide and limitations](pilot-release/TASK_04_GUIDE_VI.md)
+- [Current English standalone guide](pilot-release/USER_GUIDE_EN.md) and [Task 05 verification, package details and roadmap](pilot-release/TASK_05_RELEASE.md)
+- [Earlier Task 04 guide and limitations](pilot-release/TASK_04_GUIDE_VI.md)
 - [Implementation, verification and acceptance report](frontend-v2/TASK_04_REPORT.md)
 - [Earlier Task 03 guide](pilot-release/USER_GUIDE_VI.md) and [Task 03 packaging notes](pilot-release/README.md) are historical references, not replacements for the current Task 04 guide.
 
-The current builder is `pilot-release/build_task04.py`. On the packaging host with installed dependencies and the protected Tenor runtime cache, run from the repository root:
+The Task 05 stabilization builder is `pilot-release/build_task05.py`. It builds application code from accepted commit `945821c`, excludes unrelated working-tree code, and records source acceptance separately from pending release acceptance. On the packaging host with installed dependencies and the protected Tenor runtime cache, run from the repository root:
 
 ```bash
-python3 -B pilot-release/build_task04.py --accepted --output /absolute/path/to/new-bundle-directory
+python3 -B pilot-release/build_task05.py --output /absolute/path/to/new-bundle-directory
 ```
 
-The builder refuses to overwrite existing output. It needs the local accepted Tenor runtime cache, which is not distributed in Git; a fresh clone alone is insufficient to reproduce the bundle. Use `--accepted` only for scope accepted by the Product Owner.
+The builder refuses to overwrite existing output. It needs the local accepted Tenor runtime cache, which is not distributed in Git; a fresh clone alone is insufficient to reproduce the bundle. Task 05 packages remain release candidates until explicit Product Owner release acceptance. Earlier `build_task04.py` output and archives are historical baselines.
 
 ## Saving and reopening
 
@@ -120,7 +125,7 @@ cd backend
 .venv/bin/python -B -m pytest -q --ignore=tests/music/test_recognition_benchmark.py
 ```
 
-The original Task 04 checkpoint recorded 1,122 backend tests passed, 3 skipped, and 55 frontend unit tests passed. The October 29 verification recorded **1,147 backend tests passed, 3 skipped; 56 frontend unit tests passed**, with lint, TypeScript and build passing. The recognition benchmark was excluded. Browser verification has separately documented scope, including skipped private-fixture cases and targeted reruns; no clean full-browser-suite result is implied. These results do not certify perfect OMR accuracy.
+The original Task 04 checkpoint recorded 1,122 backend tests passed, 3 skipped, and 55 frontend unit tests passed. The October 29 verification recorded **1,147 backend tests passed, 3 skipped; 56 frontend unit tests passed**, with lint, TypeScript and build passing. The recognition benchmark was excluded. The later Task 05 release candidate completed a clean 106-test packaged browser run with private fixtures enabled; the Task 05 report preserves the earlier failed/skipped runs and test-only corrections. Those fixtures remain unpublished. These results do not certify perfect OMR accuracy.
 
 `npm run test:e2e` uses Playwright and requires ports 5174/8812 to be available. The current configuration contains the Firefox path used on the verified WSL host; other hosts must adjust it. Some tests use unpublished private fixtures or local evidence; inspect their skip conditions and paths. Do not run tests against a session containing unsaved user edits.
 
