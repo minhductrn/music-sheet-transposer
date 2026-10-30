@@ -1,0 +1,17 @@
+import {useCallback,useEffect,useRef,useState} from 'react';
+import {PDFPreview} from './PDFPreview';
+import type {PDFSettings} from './a4Layout';
+export type PDFArtifact={blob:Blob;pages:number};
+type Props={name:string;generate:(settings:PDFSettings,signal:AbortSignal)=>Promise<PDFArtifact>;done:(exported:boolean)=>void};
+export function PDFExportDialog({name,generate,done}:Props){
+ const dialog=useRef<HTMLDialogElement>(null),serial=useRef(Promise.resolve());
+ const [settings,setSettings]=useState<PDFSettings>({layout:'one-page',margins:'auto'}),[artifact,setArtifact]=useState<PDFArtifact|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[preview,setPreview]=useState<'loading'|'ready'|'error'>('loading');
+ const onStatus=useCallback((status:'loading'|'ready'|'error',message?:string)=>{setPreview(status);if(status==='error')setError(message||'Cannot preview PDF.');},[]);
+ useEffect(()=>{const node=dialog.current;node?.showModal();return()=>node?.close();},[]);
+ useEffect(()=>{const controller=new AbortController();setArtifact(null);setLoading(true);setError('');setPreview('loading');
+  serial.current=serial.current.catch(()=>{}).then(async()=>{if(controller.signal.aborted)return;try{const result=await generate(settings,controller.signal);if(!controller.signal.aborted)setArtifact(result);}catch(e){if(!controller.signal.aborted)setError(e instanceof Error?e.message:'PDF generation failed.');}finally{if(!controller.signal.aborted)setLoading(false);}});
+  return()=>controller.abort();
+ },[settings,generate]);
+ function download(){if(!artifact||loading||error||preview!=='ready')return;const url=URL.createObjectURL(artifact.blob),link=document.createElement('a');link.href=url;link.download=name.replace(/\.(musicxml|xml)$/i,'')+'.pdf';document.body.append(link);link.click();link.remove();window.setTimeout(()=>URL.revokeObjectURL(url),10000);done(true);}
+ return <dialog ref={dialog} className="pdf-export-dialog" aria-label="PDF layout" onCancel={e=>{e.preventDefault();done(false);}}><header><h2>Export PDF</h2><button type="button" aria-label="Close PDF export" onClick={()=>done(false)}>×</button></header><div className="pdf-export-options"><label>Layout<select autoFocus aria-label="PDF page layout" value={settings.layout} onChange={e=>setSettings(s=>({...s,layout:e.target.value as PDFSettings['layout']}))}><option value="one-page">Fit in 1 A4 page</option><option value="multiple-pages">Multiple A4 pages</option></select></label><label>Margins<select aria-label="PDF margins" value={settings.margins} onChange={e=>setSettings(s=>({...s,margins:e.target.value as PDFSettings['margins']}))}><option value="auto">Auto</option><option value="standard">Standard 12 mm</option></select></label></div><p className="pdf-export-help">{settings.layout==='one-page'?'The complete score fits one A4 page. Long scores may print small.':'Complete systems continue across A4 pages.'}</p><div className="pdf-export-body">{loading&&<p role="status">Preparing PDF…</p>}{error&&<p role="alert">{error}</p>}{artifact&&<PDFPreview blob={artifact.blob} onStatus={onStatus}/>}</div><footer><span>{artifact?artifact.pages+' A4 '+(artifact.pages===1?'page':'pages'):''}</span><button type="button" onClick={()=>done(false)}>Cancel</button><button type="button" disabled={loading||!!error||!artifact||preview!=='ready'} onClick={download}>Export</button></footer></dialog>;
+}

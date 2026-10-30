@@ -7,3 +7,10 @@
 :root{--score-text-font:"DejaVu Serif","Liberation Serif","Times New Roman",serif}
 .lyric,.score-text,.score foreignObject input{font-family:var(--score-text-font);font-kerning:normal;font-variant-ligatures:normal;letter-spacing:normal;word-spacing:normal;text-rendering:optimizeLegibility}
 .lyric{font-size:18px;white-space:pre}
+
+/* Classic Home-only cleanup. Loaded editors keep the accepted vertical rail. */
+
+.home-screen>.app-header{min-height:64px;position:relative;padding:18px 28px}.home-screen>.app-header .brand strong{font-size:18px}.home-screen>.app-header .brand small,.home-screen>.app-header .header-actions,.home-screen>.shell>.rail,.home-screen>.shell>main>.workspace-heading,.home-screen>.notice:not(.home-feedback){display:none}.home-screen>.shell{display:block;max-width:900px;margin:32px auto;padding:0 20px}.home-screen .import-area{margin:0 auto;padding:32px 24px}.home-screen .import-area h1{margin:8px 0 12px}.home-screen .import-symbol{font-size:48px}.home-screen .import-area p{margin:8px 0}.home-screen .import-area label{margin:16px 0}.home-screen .import-area .muted{max-width:560px;margin:8px auto}
+@media(max-width:600px){.home-screen>.app-header{padding:16px 20px}.home-screen>.shell{margin:20px auto;padding:0 12px}.home-screen .import-area{padding:24px 16px}.home-screen .import-area select{max-width:100%;margin:8px 0 0}.home-screen .import-area label{display:flex;flex-direction:column;align-items:center}}
+
+.home-screen>.home-feedback{position:static;max-width:800px;margin:16px auto;padding:10px 16px;border:1px solid #d8e2ec;background:#fff;color:#24364b;box-shadow:none;border-radius:7px}

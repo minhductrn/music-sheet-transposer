@@ -1,3 +1,9 @@
+# Classic Task 06.1 hotfix
+
+Independent local Classic maintenance branch. The accepted Task 06 backend and vertical editor remain unchanged. This update hides editing chrome on Home and displays **Add Chord** without the decorative G in Stage 1 and Stage 2.
+
+See [launch and rollback instructions](pilot-release/CLASSIC_HOTFIX_GUIDE_EN.md). The original Classic package is never overwritten. UX Next remains a separate development line. This branch does not contain advanced editing.
+
 # Music Sheet Transposer
 
 A local application for importing scores, editing notation directly, changing Concert key, and preparing independent saxophone written scores. **`frontend-v2/` is the default interface.** The legacy `frontend/` remains available for historical reference.
