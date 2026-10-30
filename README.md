@@ -34,7 +34,7 @@ Advanced editing has not started. Copy/paste of a selected passage and selective
 
 ---
 
-A local application for importing scores, editing notation directly, changing Concert key, and preparing independent saxophone written scores. **`frontend-v2/` is the default interface.** The legacy `frontend/` remains available for historical reference.
+A local application for importing scores, editing notation directly, changing Concert key, and preparing independent saxophone written scores. **`frontend-v2/` is the default interface.** The retired `frontend/` is preserved in a local source archive and excluded from Git tracking. Historical committed versions remain in Git history.
 
 Conversation may use Vietnamese or English. Project documentation is maintained in English; older documents may retain historical filenames or language until explicitly migrated.
 
@@ -179,7 +179,7 @@ The original Task 04 checkpoint recorded 1,122 backend tests passed, 3 skipped, 
 | `frontend-v2/` | Default interface, Task 04 report and tests |
 | `backend/` | Recognition, review/editing and MusicXML transposition APIs |
 | `pilot-release/` | Standalone builder, launcher and guides |
-| `frontend/` | Legacy interface retained for reference |
+| `frontend/` | Retired local-only interface; excluded from Git tracking |
 
 The [legacy README](README_LEGACY.md) preserves older documentation; historical status does not establish current acceptance. A GitHub source checkpoint is not a production deployment.
 

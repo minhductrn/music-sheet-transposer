@@ -16,3 +16,10 @@ frontend/dist/
 /local-user-artifacts/
 /review-cungdemtimung.musicxml
 /backend/tests/music/fixtures/p05_benchmark_raw.musicxml
+
+# Retired interface: retained locally; do not synchronize.
+/frontend/
+
+# Local dependencies and generated builds.
+/frontend-v2/node_modules
+/frontend-v2/dist/
