@@ -147,6 +147,67 @@ def duration_patch(doc, note, duration: str, divisions, grace=False):
     raise ReviewError("That duration has no supported note type/dot spelling. Existing tuplet ratios are retained.")
 
 
+def measure_accidental(doc, note, measure, event, spelling, entries):
+    """Explicit notation command: carry spelling forward by staff/pitch in this bar."""
+    pitch = doc.child(note, "pitch")
+    step, octave = doc.text(pitch, "step"), doc.text(pitch, "octave")
+    candidates = sorted(
+        [e for v in measure.voices for e in v.events
+         if e.pitch and e.staff == event.staff and e.pitch.step == step
+         and e.pitch.octave == int(octave) and e.onset is not None],
+        key=lambda e: (rational(e.onset), list(doc.parent(note)).index(doc.refs[e.id])),
+    )
+    signs = {"flat-flat": "-2", "flat": "-1", "natural": "0", "sharp": "1", "double-sharp": "2"}
+    fifths = int(event.key_signature[0]["fifths"]) if event.key_signature else 0
+    alter = str(1 if fifths > 0 else -1) if step in ("FCGDAEB" if fifths >= 0 else "BEADGCF")[:abs(fifths)] else "0"
+    for e in candidates:
+        if rational(e.onset) >= rational(event.onset):
+            break
+        explicit = doc.text(doc.refs[e.id], "accidental")
+        if explicit in signs:
+            alter = signs[explicit]
+    if spelling is not None:
+        alter = signs[spelling]
+    affected = [event]
+    for e in candidates:
+        if rational(e.onset) <= rational(event.onset):
+            continue
+        if e.key_signature != event.key_signature or doc.child(doc.refs[e.id], "accidental") is not None:
+            break
+        affected.append(e)
+    # Resolve preserved ties against the pre-edit score, before pitches change.
+    from .ties import current_target, has
+    edges = {}
+    unresolved = set()
+    for source_id in entries:
+        node = doc.refs[source_id]
+        if has(doc, node, "start") or has(doc, node, "start", True):
+            target_id = current_target(doc, source_id, entries)
+            if target_id is None:
+                unresolved.add(source_id)
+                continue
+            edges.setdefault(source_id, set()).add(target_id)
+            edges.setdefault(target_id, set()).add(source_id)
+    ids = {e.id for e in affected}
+    pending = list(ids)
+    while pending:
+        identifier = pending.pop()
+        node = doc.refs[identifier]
+        if identifier in unresolved or ((has(doc, node, "stop") or has(doc, node, "stop", True)) and identifier not in edges):
+            raise ReviewError("This tie is ambiguous or incomplete. Correct its connection before changing the accidental; no notes were changed.")
+        for other in edges.get(identifier, set()):
+            linked = entries[other][2]
+            if not linked.pitch or (linked.pitch.step, linked.pitch.octave, linked.pitch.alter) != (event.pitch.step, event.pitch.octave, event.pitch.alter):
+                raise ReviewError("This tie connects different pitches. Correct its connection before changing the accidental; no notes were changed.")
+            if other not in ids:
+                ids.add(other)
+                affected.append(linked)
+                pending.append(other)
+    from .models import PitchInput
+    for e in affected:
+        pitch_patch(doc, doc.refs[e.id], PitchInput(step=step, octave=int(octave), alter=alter))
+
+
 def patch_event(doc: Document, identifier: str, patch: EventPatch):
     if "tie_direction" in patch.model_fields_set:
         if patch.model_fields_set != {"tie_direction"} or patch.tie_direction is None:
@@ -158,10 +219,16 @@ def patch_event(doc: Document, identifier: str, patch: EventPatch):
     values.pop("tie_to_event_id", None)
     values.pop("preserve_onsets", None)
     values.pop("duration_scope", None)
+    values.pop("accidental_scope_measure", None)
     if (not values and not tie_edit) or any(value is None for key, value in values.items() if key != "written_accidental"):
         raise ReviewError("Provide at least one non-null event correction.")
     note = doc.get(identifier, "note")
     measure, event = context(doc, note)
+    accidental_entries = None
+    if patch.accidental_scope_measure:
+        from .ties import entries_for
+        original_score, _ = import_score(doc)
+        accidental_entries = entries_for(original_score)
     members = group(doc, note)
     if patch.staff is not None and patch.staff > measure.staves:
         raise ReviewError("Staff exceeds the part's declared staff count.")
@@ -172,6 +239,10 @@ def patch_event(doc: Document, identifier: str, patch: EventPatch):
             remove(doc, note, "accidental")
         else:
             accidental_patch(doc, note, patch.written_accidental)
+    if patch.accidental_scope_measure:
+        if "written_accidental" not in patch.model_fields_set or not event.pitch:
+            raise ReviewError("Measure accidental scope requires a pitched note and an explicit accidental command.")
+        measure_accidental(doc, note, measure, event, patch.written_accidental, accidental_entries)
     if patch.staff is not None:
         put(doc, note, "staff", patch.staff)
     if patch.voice is not None:

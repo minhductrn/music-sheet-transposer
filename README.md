@@ -1,5 +1,39 @@
 # Music Sheet Transposer
 
+## UX Next checkpoint — October 30, 2026
+
+This branch, **ux-next/checkpoint-2026-10-30**, preserves the independent UX Next work. It does not replace the Classic installation or the default branch.
+
+**Scoped Product Owner acceptance:** the simplified Home and accidental/tie editing have been accepted. The complete UX redesign remains a candidate; this is not a new production release or approval of advanced editing.
+
+- Home displays the application title and import controls. Editing tools appear after opening a score.
+- Stage 1 and Stage 2 use the same editing commands in Compare and Edit Only; original sources remain read-only.
+- **Remove accidental** restores the preceding accidental context or key signature.
+- An explicit accidental command applies to later notes with the same step, octave and staff within the measure, ending at an explicit replacement or changed key context.
+- Resolved tie chains retain their connections, directions and durations while their pitches are corrected together, including cross-bar continuations. Unrelated notes in the next bar are not changed.
+- Ambiguous, incomplete or originally pitch-mismatched ties are reported rather than guessed.
+
+### Verification and acceptance
+
+The latest targeted suite passed **47 backend tests**, plus a browser check of tied-note accidental entry, removal and Undo. Production build, TypeScript and package integrity checks passed. XML serialization/reimport and exact Undo/Redo were verified. The Product Owner additionally reported testing tied notes and notes sharing a chord position. Stage 2/PDF user checks were reported on the preceding accidental-scope revision; automated Stage 2/PDF checks were not rerun for preview.13.
+
+See the [scoped acceptance record](pilot-release/UX_NEXT_ACCIDENTAL_TIE_ACCEPTANCE.json), [implementation and verification report](pilot-release/UX_NEXT_REPORT.md), [English UX guide](pilot-release/UX_NEXT_USER_GUIDE_EN.md), and [baseline provenance](UX_NEXT_BASELINE.json).
+
+### Run independently
+
+On the existing WSL installation:
+
+- Classic: `python3 -B /home/dtran/music-sheet-transposer-releases/music-sheet-transposer-classic-task06/start.py --port 5181`
+- UX Next preview.13: `python3 -B /home/dtran/music-sheet-transposer-releases/music-sheet-transposer-ux-next-preview13/start.py --port 5233`
+
+These are local package paths, not files included in a fresh clone. A clone uses the development setup below. Keep Classic and UX Next in separate checkouts and processes; do not copy UX Next over Classic. The package builder requires the preserved local Classic baseline. Release archives, dependencies, private scores and OMR evidence are not committed here.
+
+### Next scope
+
+Advanced editing has not started. Copy/paste of a selected passage and selective transposition require a separate bounded design and authorization. Cloud deployment is deferred. OMR remains a draft recognition tool requiring user correction.
+
+---
+
 A local application for importing scores, editing notation directly, changing Concert key, and preparing independent saxophone written scores. **`frontend-v2/` is the default interface.** The legacy `frontend/` remains available for historical reference.
 
 Conversation may use Vietnamese or English. Project documentation is maintained in English; older documents may retain historical filenames or language until explicitly migrated.

@@ -1,0 +1,28 @@
+{
+  "date": "2026-10-30",
+  "status": "ACCEPTED",
+  "scope": "UX Next accidental editing and resolved tie-chain corrections only",
+  "version": "ux-next-preview.13",
+  "package": "/home/dtran/music-sheet-transposer-releases/music-sheet-transposer-ux-next-preview13",
+  "package_manifest_sha256": "1ce06a1082855dba0d24be5d32985b5f20468afcf8ca095414937b054d2f670b",
+  "product_owner_authority": "Explicit request to perform acceptance before proceeding to advanced editing, following user testing confirmations.",
+  "user_reported_checks": [
+    "Stage 1, Stage 2 and PDF on the preceding accidental-scope revision",
+    "Tied notes on preview.13",
+    "Notes sharing a position/chord on preview.13"
+  ],
+  "automated_evidence": {
+    "targeted_backend_tests": 47,
+    "result": "PASS",
+    "browser": "Tied-note sharp, removal and Undo PASS",
+    "build_typecheck_package_integrity": "PASS"
+  },
+  "limits": [
+    "Ambiguous, incomplete or originally pitch-mismatched tie relationships are not inferred; correction is rejected with a message.",
+    "Stage 2/PDF were not rerun automatically for preview.13; earlier user checks are not represented as new automated evidence.",
+    "This is scoped acceptance, not acceptance of all UX Next or all advanced features."
+  ],
+  "next_work": "Advanced editing remains not started and requires a bounded agreed scope.",
+  "github": "Prepared for the authorized UX Next checkpoint branch; unrelated working-tree changes excluded.",
+  "classic": "Unchanged"
+}

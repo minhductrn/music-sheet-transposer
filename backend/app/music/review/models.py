@@ -119,6 +119,7 @@ class PitchInput(Request):
 
 
 class EventPatch(Request):
+    accidental_scope_measure: StrictBool = False
     tie_direction: Literal["up", "down"] | None = None
     duration_scope: Literal["note", "chord"] = "chord"
     preserve_onsets: StrictBool = False
