@@ -232,6 +232,21 @@ class ReviewService:
             self.store.put(updated)  # Commit only after the edit, projection and quotas succeed.
             return payload
 
+    def section_preview(self, identifier, revision, request):
+        from .sections import append_section
+        with self.store.lock:
+            session=self._session(identifier,revision)
+            candidate=session.document.clone()
+            info=append_section(candidate,request,f"preview-{session.sequence+1}")
+            if len(candidate.xml())>self.config.recognition_max_output_bytes or sum(1 for _ in candidate.root.iter())>self.config.review_max_xml_nodes:
+                raise ReviewError("The copied section exceeds the score size limit.",413)
+            payload=self.payload(replace(session,document=candidate))
+            return {"preview":payload,"section":info}
+
+    def section_append(self, identifier, revision, request):
+        from .sections import append_section
+        return self.edit(identifier,revision,lambda doc,seq:append_section(doc,request,seq))
+
     def document_correction(self, identifier, revision, contents):
         """Keep source/history/sidecars for explicit beam, meter and key edits.
 

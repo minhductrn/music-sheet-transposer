@@ -1,0 +1,2 @@
+import {defineConfig} from '@playwright/test';
+export default defineConfig({testDir:'./tests/e2e',timeout:90000,expect:{timeout:15000},workers:1,reporter:[['list'],['json',{outputFile:'evidence/advanced-v1/browser-results.json'}]],use:{baseURL:process.env.ADVANCED_URL??'http://127.0.0.1:5240',viewport:{width:1440,height:900},browserName:'firefox',launchOptions:{executablePath:'/home/dtran/.cache/ms-playwright/firefox-1555/firefox/firefox'},screenshot:'only-on-failure'},outputDir:'evidence/advanced-v1/test-output'});

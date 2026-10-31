@@ -1,0 +1,38 @@
+{
+  "feature": "Advanced Editing v1",
+  "version": "advanced-v1-preview.5",
+  "status": "ACCEPTED",
+  "accepted_on": "2026-10-31",
+  "authority": "Product Owner",
+  "approval_evidence": [
+    {
+      "scope": "Advanced Editing v1 and section-panel layout, preview.4",
+      "statement": "Product Owner confirmed that the requirements were met."
+    },
+    {
+      "scope": "Full-width Concert Key Preview, preview.5",
+      "statement": "Product Owner confirmed that the requirements were met."
+    }
+  ],
+  "checkpoint_authorization": "Product Owner explicitly requested commit/push to GitHub and an English README update.",
+  "parent_checkpoint": "91d74a3",
+  "branch": "ux-next/advanced-editing-v1",
+  "package_directory": "/home/dtran/music-sheet-transposer-releases/music-sheet-transposer-advanced-v1-preview5",
+  "package_manifest_sha256": "8bfc8d37a8c11239422d23af922b155eac4a44c93ab130d92062ac06aa1fcef3",
+  "verification": {
+    "browser_regression_initial_candidate": 124,
+    "browser_final_focused": 14,
+    "frontend_unit": 63,
+    "backend_transposition_suite": 32,
+    "backend_relationship_suite": 91,
+    "backend_overlap": 8,
+    "lint": "PASS",
+    "build": "PASS",
+    "final_package_integrity": "PASS",
+    "final_application_source_matches_package": true
+  },
+  "scope": "One part/one staff; complete-measure range copy, explicit transposition of notes and chord symbols, append-to-end, boundary signature/barline, shared Concert key controls, Preview/Apply/Cancel, Undo/Redo and MusicXML/PDF output.",
+  "preserved": "Classic and accepted RC1 packages remain unchanged.",
+  "package_receipt_note": "The immutable package retains its pre-acceptance PENDING receipt; this repository record is the subsequent Product Owner acceptance. No accepted package files were rewritten.",
+  "technical_report": "ADVANCED_EDITING_V1_REPORT.md"
+}

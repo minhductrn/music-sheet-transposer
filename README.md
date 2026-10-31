@@ -1,3 +1,27 @@
+# Advanced Editing v1 — accepted UX Next checkpoint
+
+This branch (`ux-next/advanced-editing-v1`) extends accepted UX Next RC1 commit `91d74a3`. The Product Owner accepted Advanced Editing v1 and the final preview.5 Concert Preview layout on October 31, 2026. See the [acceptance record](pilot-release/ADVANCED_EDITING_V1_ACCEPTANCE.json). Accepted RC1 and Classic packages remain unchanged.
+
+- Copy a contiguous range of complete measures and append a transposed copy at the end.
+- Select the source key, use half-tone steps or choose a destination key, preview, then apply.
+- Notes and chord symbols transpose together; a double barline and destination key mark the new section.
+- The compact key control is also available in Concert Key. Up/Down remains available.
+- One part and one staff in v1; complete ties, slurs and tuplets must be included.
+
+See the [implementation contract](pilot-release/ADVANCED_EDITING_V1.md), [English user guide](pilot-release/ADVANCED_EDITING_GUIDE_EN.md), and [verification report](pilot-release/ADVANCED_EDITING_V1_REPORT.md).
+
+Run the accepted independent package:
+
+```bash
+python3 -B /home/dtran/music-sheet-transposer-releases/music-sheet-transposer-advanced-v1-preview5/start.py --port 5245
+```
+
+Open http://localhost:5245. Classic remains the separate production installation; this checkpoint does not replace it. The Product Owner authorized committing and pushing this checkpoint together with the English README update.
+
+---
+
+The accepted RC1 reference documentation below describes the preserved parent checkpoint.
+
 # Music Sheet Transposer
 
 ## UX Next 1.0.0-rc1 — accepted checkpoint

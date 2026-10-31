@@ -10,7 +10,7 @@ from starlette.concurrency import run_in_threadpool
 from app.core.config import settings
 from app.music.review.document import ReviewError
 from app.music.review.models import (
-    TupletWork, EventsDelete, HarmonyMove, TextToLyrics, NotationEdit, SlurEdit, TripletReplacement, TripletSelection, TripletEdit, EventAdd, EventMove, EventPatch, HarmonyAdd, HarmonyPatch, LyricAdd, LyricMove, ReviewTranspose, ScoreTextAdd, SourceConfirmation, TextPatch, VerifyRequest,
+    SectionAppend, TupletWork, EventsDelete, HarmonyMove, TextToLyrics, NotationEdit, SlurEdit, TripletReplacement, TripletSelection, TripletEdit, EventAdd, EventMove, EventPatch, HarmonyAdd, HarmonyPatch, LyricAdd, LyricMove, ReviewTranspose, ScoreTextAdd, SourceConfirmation, TextPatch, VerifyRequest,
 )
 from app.music.review.service import ReviewService
 from app.music.review.storage import MemoryReviewStore
@@ -335,3 +335,15 @@ async def move_harmony(review_id: str, harmony_id: str, request: HarmonyMove, re
 @router.post("/{review_id}/events/delete-selection")
 async def delete_selection(review_id: str, request: EventsDelete, revision: int = Depends(expected_revision), service: ReviewService = Depends(get_review_service)):
     return await response(await call(service.events_delete, review_id, revision, request.event_ids))
+
+
+@router.post("/{review_id}/sections/preview")
+async def section_preview(review_id: str, request: SectionAppend,
+                          revision: int = Depends(expected_revision), service: ReviewService = Depends(get_review_service)):
+    return JSONResponse(
+        await call(service.section_preview, review_id, revision, request), headers={"Cache-Control":"no-store"})
+
+@router.post("/{review_id}/sections/append")
+async def section_append(review_id: str, request: SectionAppend,
+                         revision: int = Depends(expected_revision), service: ReviewService = Depends(get_review_service)):
+    return await response(await call(service.section_append, review_id, revision, request))

@@ -1,1 +1,1 @@
-export const UX_NEXT_VERSION = '1.0.0-rc1';
+export const UX_NEXT_VERSION = 'advanced-v1-preview.5';

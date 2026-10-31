@@ -318,3 +318,12 @@ class HarmonyMove(Request):
 
 class EventsDelete(Request):
     event_ids: list[str] = Field(min_length=1, max_length=4096)
+
+
+class SectionAppend(Request):
+    start_measure_id: str = Field(min_length=1, max_length=128)
+    end_measure_id: str = Field(min_length=1, max_length=128)
+    source_fifths: StrictInt = Field(ge=-7, le=7)
+    target_fifths: StrictInt = Field(ge=-7, le=7)
+    mode: Literal["major", "minor"]
+    semitones: StrictInt = Field(ge=-24, le=24)

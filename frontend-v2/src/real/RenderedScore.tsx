@@ -10,6 +10,8 @@ export type Curve = {
     direction: 'up' | 'down';
 };
 type Props = {
+    onMeasurePick?:(measure:string)=>void;
+    measureSelection?:string[];
     printCompact?: boolean;
     review: Review;
     readOnly?: boolean;
@@ -39,9 +41,9 @@ type Props = {
     onReady?: (count: number) => void;
 };
 // A head is interactive only when renderer semantics resolve exactly one XML event.
-export function RenderedScore({ printCompact=false, review, readOnly, fitVersion=0, zoom, selected, selection=[], boxSelect=false, onSelection, onHarmony, onHarmonyCandidates, onStaffContext, selectedText, selectedMark, onMark, onHead, onLyric, onText, onGap, onReady, onAmbiguous, onCurve, onAnchor }: Props) {
-    const host = useRef<HTMLDivElement>(null), live = useRef({ boxSelect, onSelection, onHarmony, onHarmonyCandidates, onStaffContext, selected, onMark, onHead, onLyric, onText, onGap, onReady, onAmbiguous, onCurve, onAnchor });
-    live.current = { boxSelect, onSelection, onHarmony, onHarmonyCandidates, onStaffContext, selected, onMark, onHead, onLyric, onText, onGap, onReady, onAmbiguous, onCurve, onAnchor };
+export function RenderedScore({ onMeasurePick,measureSelection=[],printCompact=false, review, readOnly, fitVersion=0, zoom, selected, selection=[], boxSelect=false, onSelection, onHarmony, onHarmonyCandidates, onStaffContext, selectedText, selectedMark, onMark, onHead, onLyric, onText, onGap, onReady, onAmbiguous, onCurve, onAnchor }: Props) {
+    const host = useRef<HTMLDivElement>(null), live = useRef({ onMeasurePick,boxSelect, onSelection, onHarmony, onHarmonyCandidates, onStaffContext, selected, onMark, onHead, onLyric, onText, onGap, onReady, onAmbiguous, onCurve, onAnchor });
+    live.current = { onMeasurePick,boxSelect, onSelection, onHarmony, onHarmonyCandidates, onStaffContext, selected, onMark, onHead, onLyric, onText, onGap, onReady, onAmbiguous, onCurve, onAnchor };
     const fitted=useRef(0);
     const scrollPosition=useRef({top:0,left:0});
     const [error, setError] = useState(''), [width, setWidth] = useState(0);
@@ -59,6 +61,7 @@ export function RenderedScore({ printCompact=false, review, readOnly, fitVersion
 
         (async () => {
             try {
+                const sectionLayers:(()=>void)[]=[];
                 await osmd.load(renderXML(review.xml));
                 if (disposed)
                     return;
@@ -290,6 +293,15 @@ export function RenderedScore({ printCompact=false, review, readOnly, fitVersion
                             if (lines.length !== 5)
                                 continue;
                             const staffNumber = staff.ParentInstrument.Staves.indexOf(staff) + 1, position = measure.PositionAndShape.AbsolutePosition, left = (position.x + measure.PositionAndShape.BorderLeft) * 10, right = (position.x + measure.PositionAndShape.BorderRight) * 10, top = (measure.ParentStaffLine.PositionAndShape.AbsolutePosition.y + lines[0].Start.y) * 10, spacing = (lines[4].Start.y - lines[0].Start.y) * 10 / 4;
+                            if(live.current.onMeasurePick){
+                                const hit=document.createElementNS('http://www.w3.org/2000/svg','rect');
+                                hit.setAttribute('x',String(left));hit.setAttribute('y',String(top-spacing*2));hit.setAttribute('width',String(Math.max(1,right-left)));hit.setAttribute('height',String(spacing*10));
+                                const active=measureSelection.includes(canonical.id);
+                                hit.setAttribute('fill',active?'rgba(30,110,200,.12)':'transparent');hit.setAttribute('stroke',active?'#1769b5':'transparent');
+                                hit.setAttribute('role','button');hit.setAttribute('tabindex','0');hit.setAttribute('aria-label','Select measure '+canonical.number);hit.setAttribute('data-measure-select',canonical.id);hit.setAttribute('aria-pressed',String(active));hit.style.cursor='pointer';
+                                hit.onpointerdown=e=>e.stopPropagation();hit.onclick=e=>{e.preventDefault();e.stopPropagation();live.current.onMeasurePick?.(canonical.id);};hit.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();live.current.onMeasurePick?.(canonical.id);}};
+                                sectionLayers.push(()=>svg.append(hit));
+                            }
                             const points = [...bindings].filter(([, v]) => v.event.staff === staffNumber && canonical.voices.some(voice => voice.events.includes(v.event))).map(([node, v]) => { const b = node.getBoundingClientRect(); return { beat: rational(v.event.onset), x: new DOMPoint(b.left + b.width / 2, b.top).matrixTransform(inverse).x }; }).sort((a, b) => a.beat - b.beat);
                             if (!points.length) points.push({beat:0,x:left+Math.min(35,(right-left)/3)});
                             if (!(right > left))
@@ -458,6 +470,7 @@ export function RenderedScore({ printCompact=false, review, readOnly, fitVersion
                 if(element.querySelectorAll('svg').length===1)element.querySelector('svg')!.setAttribute('data-pdf-breaks',JSON.stringify(ordered.slice(1).map((s,i)=>(ordered[i].bottom+s.top)/2)));
                 live.current.onReady?.(count);
                 setError('');
+                sectionLayers.forEach(append=>append());
             }
             catch (e) {
                 if (!disposed)
@@ -465,7 +478,7 @@ export function RenderedScore({ printCompact=false, review, readOnly, fitVersion
             }
         })();
         return () => { disposed = true; const viewport=element.parentElement;if(viewport)scrollPosition.current={top:viewport.scrollTop,left:viewport.scrollLeft};element.replaceChildren(); };
-    }, [review, readOnly, zoom, width,fitVersion,printCompact]);
+    }, [review, readOnly, zoom, width,fitVersion,printCompact,!!onMeasurePick,measureSelection.join(",")]);
     useEffect(() => { host.current?.querySelectorAll('[data-event-id]').forEach(n => { const active = n.getAttribute('data-event-id') === selected || selection.includes(n.getAttribute('data-event-id')??''); n.classList.toggle('real-selected', active); n.setAttribute('aria-pressed', String(active)); }); }, [selected, selection, review, zoom]);
     useEffect(()=>{host.current?.querySelectorAll('[data-text-id]').forEach(n=>{n.classList.toggle('real-object-selected',n.getAttribute('data-text-id')===selectedText);});},[selectedText,review,zoom]);
     useEffect(()=>{host.current?.querySelectorAll('[data-mark-id]').forEach(n=>{n.setAttribute('stroke',n.getAttribute('data-mark-id')===selectedMark?'#1769b5':'transparent');});},[selectedMark,review,zoom]);

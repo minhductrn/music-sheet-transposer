@@ -9,6 +9,7 @@ from app.music.musicxml.transposer import (
     transpose_musicxml_document,
 )
 from app.music.musicxml.concert_key import concert_key_info, transpose_concert_key
+from app.music.review.document import ReviewError
 from app.music.transposition.score_transposer import transpose_score
 from app.schemas.transposition import (
     TransposeRequest,
@@ -35,16 +36,21 @@ async def transpose_concert_musicxml(
     file: UploadFile = File(...),
     target_fifths: Annotated[int, Form(ge=-7, le=7)] = 0,
     direction: Annotated[Literal["up", "down"], Form()] = "up",
+    semitones: Annotated[int | None, Form(ge=-24, le=24)] = None,
 ) -> Response:
     if not source_confirmed:
         raise HTTPException(status_code=422, detail="Confirm the Source Key before transposing.")
     try:
-        contents = await run_in_threadpool(
-            transpose_concert_key, await file.read(), target_fifths, direction,
-            source_fifths=source_fifths, source_mode=source_mode,
-        )
-    except MusicXMLTranspositionError as error:
-        raise HTTPException(status_code=422, detail=str(error)) from error
+        raw = await file.read()
+        if semitones is None:
+            contents = await run_in_threadpool(
+                transpose_concert_key, raw, target_fifths, direction,
+                source_fifths=source_fifths, source_mode=source_mode)
+        else:
+            from app.music.review.sections import transpose_interval
+            contents = await run_in_threadpool(transpose_interval, raw, source_fifths, target_fifths, source_mode, semitones)
+    except (MusicXMLTranspositionError, ReviewError) as error:
+        raise HTTPException(status_code=getattr(error,"status_code",422), detail=str(error)) from error
     return Response(contents, media_type="application/vnd.recordare.musicxml+xml",
                     headers={"Content-Disposition": 'attachment; filename="concert-transposed.musicxml"'})
 

@@ -143,7 +143,7 @@ export async function keyInfo(xml: string): Promise<{
     mode: 'major' | 'minor' | null;
     candidates: Key[];
 }> { return (await fileOperation('concert-key', xml, {})).json(); }
-export async function concertXML(xml: string, source: Key, target: number, direction: 'up' | 'down') { return (await fileOperation('transpose/concert-key', xml, { source_fifths: String(source.fifths), source_mode: source.mode, source_confirmed: 'true', target_fifths: String(target), direction })).text(); }
+export async function concertXML(xml: string, source: Key, target: number, direction: 'up' | 'down', semitones?: number) { return (await fileOperation('transpose/concert-key', xml, { source_fifths: String(source.fifths), source_mode: source.mode, source_confirmed: 'true', target_fifths: String(target), direction, ...(semitones===undefined?{}:{semitones:String(semitones)}) })).text(); }
 export async function saxXML(xml: string, instrument: string, direction: "up"|"down" = "up") { return (await fileOperation('transpose/instrument', xml, { instrument, direction })).text(); }
 export async function previewTriplet(r: Review, event_ids: string[]): Promise<{
     valid: boolean;
@@ -191,4 +191,13 @@ export async function manualSource(file: File): Promise<Review> {
     const xml='<score-partwise version="4.0"><part-list><score-part id="P1"><part-name>Manual reconstruction</part-name></score-part></part-list><part id="P1"><measure number="1"><attributes><divisions>192</divisions><key><fifths>0</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes><forward><duration>768</duration><voice>1</voice><staff>1</staff></forward></measure></part></score-partwise>';
     const form=new FormData();form.append('musicxml',xmlBlob(xml),'manual.musicxml');form.append('source',file);
     return projection(await fetch('/api/v1/reviews',{method:'POST',body:form}));
+}
+
+
+export type SectionRequest = { start_measure_id:string; end_measure_id:string; source_fifths:number; target_fifths:number; mode:'major'|'minor'; semitones:number };
+export async function previewSection(r:Review, body:SectionRequest):Promise<{preview:Review;section:{count:number;first_number:string;last_number:string}}>{
+ const response=await checked(await fetch(`/api/v1/reviews/${encodeURIComponent(r.id)}/sections/preview`,{method:'POST',headers:{'Content-Type':'application/json','If-Match':String(r.revision)},body:JSON.stringify(body)}));
+ const data=await response.json();
+ const bytes=Uint8Array.from(atob(data.preview.musicxml_base64),c=>c.charCodeAt(0));
+ return {...data,preview:{...data.preview,bytes,xml:new TextDecoder().decode(bytes)}};
 }
