@@ -1,3 +1,7 @@
+# Current status — October 31, 2026
+
+UX Next 1.0.0-rc1 is ACCEPTED. See UX_NEXT_RC1_ACCEPTANCE.json and UX_NEXT_RC1_REPORT.md. The dated sections below describe earlier candidate stages and do not override RC1 acceptance.
+
 # UX Next — Independent Layout Implementation
 
 Date: 2026-10-29 (America/New_York).

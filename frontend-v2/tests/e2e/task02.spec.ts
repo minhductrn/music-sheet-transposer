@@ -7,7 +7,7 @@ test.afterEach(async({request})=>{for(const id of testSessions)await request.del
 const sample=process.env.AI_SDF_TASK02_SAMPLE;
 test('Task02 local PO MusicXML opens as real 2/4 score with all semantic heads',async({page})=>{
  test.skip(!sample,'Local-only PO sample; not bundled.');await page.goto('/');await page.locator('input[type=file]').setInputFiles(sample!);
- await expect(page.getByText('MusicXML workspace · real editing',{exact:true})).toBeVisible();await expect(page.locator('.working-pane .real-score svg').first()).toBeVisible();
+ await expect(page.getByText('UX Next · 1.0.0-rc1',{exact:true})).toBeVisible();await expect(page.locator('.working-pane .real-score svg').first()).toBeVisible();
  await expect(page.locator('.working-pane [data-event-id]')).toHaveCount(63);await expect(page.locator('[role=alert]')).toHaveCount(0);await expect(page.getByTestId('real-lyric-e-6-1')).toBeVisible();
  await page.screenshot({path:'evidence/task02/real-sample-open.png',fullPage:true});
 });

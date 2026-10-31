@@ -1,0 +1,2 @@
+import {defineConfig} from '@playwright/test';
+export default defineConfig({testDir:'./tests/e2e',timeout:90000,expect:{timeout:15000},workers:1,fullyParallel:false,reporter:[['list'],['json',{outputFile:'evidence/ux-next-rc1/browser-results.json'}]],use:{baseURL:'http://127.0.0.1:5234',viewport:{width:1440,height:900},browserName:'firefox',launchOptions:{executablePath:'/home/dtran/.cache/ms-playwright/firefox-1555/firefox/firefox'},screenshot:'only-on-failure'},outputDir:'evidence/ux-next-rc1/test-output'});

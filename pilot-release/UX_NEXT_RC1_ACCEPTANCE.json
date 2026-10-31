@@ -1,0 +1,15 @@
+{
+  "date": "2026-10-31",
+  "version": "1.0.0-rc1",
+  "status": "ACCEPTED",
+  "authority": "Product Owner",
+  "approval_evidence": "The Product Owner explicitly accepted RC1 in this conversation on October 31, 2026.",
+  "scope": "Complete independent UX Next RC1 release candidate as delivered and technically verified; existing documented limitations remain.",
+  "package": "/home/dtran/music-sheet-transposer-releases/music-sheet-transposer-ux-next-1.0.0-rc1",
+  "manifest_sha256": "e6ee3d53e1eb43ba634ac5e57d5c35c70651693714bd0c275b94d3f2c67c65d6",
+  "archive_sha256": "1edca75460290e3798156b435ca2e19459f5780fa61a9eef1f5c1b00a45f987c",
+  "verification_record": "UX_NEXT_RC1_VERIFICATION.json",
+  "classic": "Preserved unchanged; no automatic production switch.",
+  "advanced_editing": "Not started; separate bounded authorization required.",
+  "github_checkpoint": "Included in the authorized RC1 checkpoint commit on ux-next/checkpoint-2026-10-30. No production switch or merge into master is included."
+}

@@ -1,0 +1,29 @@
+{
+  "date": "2026-10-30",
+  "version": "1.0.0-rc1",
+  "status": "TECHNICALLY VERIFIED",
+  "product_owner_acceptance": "PENDING for the complete UX Next release",
+  "base_commit": "702f2e0f30edb9ae88ec75d22ef0ef17949ef13b",
+  "package": "/home/dtran/music-sheet-transposer-releases/music-sheet-transposer-ux-next-1.0.0-rc1",
+  "archive_sha256": "1edca75460290e3798156b435ca2e19459f5780fa61a9eef1f5c1b00a45f987c",
+  "manifest_sha256": "e6ee3d53e1eb43ba634ac5e57d5c35c70651693714bd0c275b94d3f2c67c65d6",
+  "verification": {
+    "frontend_unit_tests": 60,
+    "targeted_backend_tests": 47,
+    "full_browser_suite": 117,
+    "additional_tie_browser_tests": 2,
+    "browser_failed": 0,
+    "browser_skipped": 0,
+    "lint_typecheck_build": "PASS",
+    "package_and_classic_integrity": "PASS"
+  },
+  "evidence": [
+    "frontend-v2/evidence/ux-next-rc1/full-browser-results.json",
+    "frontend-v2/evidence/ux-next-rc1/tie-browser-results.json"
+  ],
+  "limits": [
+    "PDF recognition workflow used synthetic responses and existing local OMR replay, not a fresh broad OMR accuracy benchmark.",
+    "Existing multipart, nested/cross-measure tuplet and ambiguous tie limitations remain.",
+    "Advanced editing, cloud deployment, replacement of Classic and the release GitHub checkpoint are not performed."
+  ]
+}

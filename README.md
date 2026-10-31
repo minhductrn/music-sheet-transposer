@@ -1,10 +1,22 @@
 # Music Sheet Transposer
 
+## UX Next 1.0.0-rc1 — accepted checkpoint
+
+The independent package was accepted by the Product Owner on October 31, 2026. See the [RC1 acceptance record](pilot-release/UX_NEXT_RC1_ACCEPTANCE.json). The interface and package manifest now share version **1.0.0-rc1**. Classic Task 06.1 remains the production installation; this candidate does not replace it.
+
+Start locally with:
+
+`python3 -B /home/dtran/music-sheet-transposer-releases/music-sheet-transposer-ux-next-1.0.0-rc1/start.py --port 5234`
+
+Open http://localhost:5234/. See the [RC1 English guide](pilot-release/UX_NEXT_RC1_GUIDE_EN.md) and [RC1 verification report](pilot-release/UX_NEXT_RC1_REPORT.md). Local package paths require the existing WSL installation; they are not a deployment command for a fresh clone. Save files explicitly before closing the app.
+
+This phase adds no advanced composition or cloud capability. Complete-release acceptance is recorded. This commit is the RC1 GitHub checkpoint; Classic remains the production installation.
+
 ## UX Next checkpoint — October 30, 2026
 
 This branch, **ux-next/checkpoint-2026-10-30**, preserves the independent UX Next work. It does not replace the Classic installation or the default branch.
 
-**Scoped Product Owner acceptance:** the simplified Home and accidental/tie editing have been accepted. The complete UX redesign remains a candidate; this is not a new production release or approval of advanced editing.
+**Historical checkpoint (October 30):** Home and accidental/tie editing had scoped acceptance at that time. Complete RC1 acceptance on October 31 supersedes that earlier candidate status. Advanced editing and replacement of Classic remain outside this checkpoint.
 
 - Home displays the application title and import controls. Editing tools appear after opening a score.
 - Stage 1 and Stage 2 use the same editing commands in Compare and Edit Only; original sources remain read-only.
@@ -15,7 +27,9 @@ This branch, **ux-next/checkpoint-2026-10-30**, preserves the independent UX Nex
 
 ### Verification and acceptance
 
-The latest targeted suite passed **47 backend tests**, plus a browser check of tied-note accidental entry, removal and Undo. Production build, TypeScript and package integrity checks passed. XML serialization/reimport and exact Undo/Redo were verified. The Product Owner additionally reported testing tied notes and notes sharing a chord position. Stage 2/PDF user checks were reported on the preceding accidental-scope revision; automated Stage 2/PDF checks were not rerun for preview.13.
+RC1 verification passed **119 packaged browser tests** (117 full-suite plus 2 focused checks), **60 frontend unit tests**, and **47 targeted backend tests**, with zero browser failures or skips. Lint, TypeScript, build and package integrity passed. See [RC1 verification](pilot-release/UX_NEXT_RC1_VERIFICATION.json). PDF recognition checks used existing OMR replay; they are not a new recognition accuracy benchmark.
+
+The earlier targeted suite passed **47 backend tests**, plus a browser check of tied-note accidental entry, removal and Undo. Production build, TypeScript and package integrity checks passed. XML serialization/reimport and exact Undo/Redo were verified. The Product Owner additionally reported testing tied notes and notes sharing a chord position. Stage 2/PDF user checks were reported on the preceding accidental-scope revision; automated Stage 2/PDF checks were not rerun for preview.13.
 
 See the [scoped acceptance record](pilot-release/UX_NEXT_ACCIDENTAL_TIE_ACCEPTANCE.json), [implementation and verification report](pilot-release/UX_NEXT_REPORT.md), [English UX guide](pilot-release/UX_NEXT_USER_GUIDE_EN.md), and [baseline provenance](UX_NEXT_BASELINE.json).
 
