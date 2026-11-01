@@ -15,4 +15,4 @@ python3 -B /home/dtran/music-sheet-transposer-releases/music-sheet-transposer-1.
 
 Save MusicXML before stopping the old instance. If port 5250 is occupied, use another free port. This update does not stop existing sessions. Version 1.0.2 appears in the header. Sealed 1.0.0 and 1.0.1 packages remain unchanged for rollback. See USER_GUIDE.md and OPERATIONS.md for current instructions; original prerequisites remain applicable.
 
-Source checkpoint and archive are published through the v1.0.2 GitHub release. The current documentation ZIP is distributed separately so the already-tested sealed application archive remains unchanged. See ACCEPTANCE.json and VERIFICATION.json for scope and actual checks.
+Source is pushed on release/1.0.2 for Pull Request review. Production branch/tag/release publication remains pending; the sealed application archive is available locally. The current documentation ZIP is distributed separately so the already-tested sealed application archive remains unchanged. See ACCEPTANCE.json and VERIFICATION.json for scope and actual checks.

@@ -6,7 +6,7 @@ Import PDF/images through local OMR or open MusicXML directly, correct Working S
 
 ## Download and start
 
-Download the application, current English documentation and SHA-256 checksums from [Release 1.0.2](https://github.com/minhductrn/music-sheet-transposer/releases/tag/v1.0.2). Extract into a new directory; never over an older package.
+The accepted application archive and current English documentation ZIP are prepared locally. GitHub production-branch/tag/release publication is pending review of the release/1.0.2 Pull Request. The existing [published 1.0.0 release](https://github.com/minhductrn/music-sheet-transposer/releases/tag/v1.0.0) remains unchanged. Extract any new package into a new directory, never over an older package.
 
 From Ubuntu WSL:
 
@@ -53,7 +53,7 @@ Advanced sections support one part/one staff and contiguous complete measures ap
 
 The maintenance package passed build/lint, 63 frontend unit tests, three private-sample PDF export checks, package integrity/ABI and extraction checks. Decoded PDF preview pixels match the accepted spacing trial in all three samples. No musical-mutation requests or browser page errors occurred during those exports. Backend code is unchanged; full OMR/transposition suites were not repeated for this presentation-only update. Historical 1.0.0 test counts are not new 1.0.2 results.
 
-Current source tag: `v1.0.2`; production branch: `release/1.0`. Original [v1.0.0](https://github.com/minhductrn/music-sheet-transposer/releases/tag/v1.0.0), packages and acceptance records remain unchanged. The standalone application archive was sealed before this documentation refresh; its manifest records exact source file hashes. The separate current documentation ZIP provides this refreshed English documentation without modifying the tested application archive.
+Prepared source branch: `release/1.0.2`; intended tag: `v1.0.2`. Updating production branch `release/1.0`, default branch and tag/release publication is pending Pull Request review. Original [v1.0.0](https://github.com/minhductrn/music-sheet-transposer/releases/tag/v1.0.0), packages and acceptance records remain unchanged. The standalone application archive was sealed before this documentation refresh; its manifest records exact source file hashes. The separate current documentation ZIP provides this refreshed English documentation without modifying the tested application archive.
 
 Active source is `frontend-v2/` and `backend/`. Legacy `frontend/` is retired and excluded from synchronization. Personal scores, exported sample PDFs and local experiments are not release source.
 

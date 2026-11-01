@@ -47,7 +47,7 @@ Version 1.0.2 is the accepted maintenance production release. Versions 1.0.0 and
 
 ## Release provenance
 
-Tag `v1.0.2` identifies the source checkpoint for the accepted maintenance update. Published `v1.0.0` is retained. The application archive and manifest identify the exact tested package; the separately published documentation ZIP contains the current English documentation. Documentation refreshed after package sealing does not rewrite the sealed application's bytes.
+The prepared branch `release/1.0.2` identifies the maintenance source checkpoint. Tag `v1.0.2` and production-ref publication remain pending review. Published `v1.0.0` is retained. The application archive and manifest identify the exact tested package; the separately published documentation ZIP contains the current English documentation. Documentation refreshed after package sealing does not rewrite the sealed application's bytes.
 
 Check the adjacent SHA-256 file before extraction and run `start.py --check` afterward. Extract to a new directory; never edit a sealed package in place. Cloud/public hosting and direct camera/Web Share remain outside scope.
 
