@@ -1,0 +1,16 @@
+{
+  "version": "1.0.0",
+  "status": "ACCEPTED",
+  "authority": "Product Owner",
+  "date": "2026-10-31",
+  "feature_checkpoint": "e8a6b24627bc84f643ede2ef4b4fba67c375e3d8",
+  "feature_version": "advanced-v1-preview.5",
+  "evidence": [
+    "Product Owner explicitly accepted Advanced Editing v1 and section layout.",
+    "Product Owner explicitly accepted the full-width Concert Key Preview.",
+    "Product Owner designated this final version as production and requested packaging as official release 1.0 with rewritten design, architecture and user documentation."
+  ],
+  "promotion_scope": "Version metadata, independent packaging and English documentation; no new musical behavior.",
+  "preserved": "Earlier packages and running sessions are not overwritten or stopped.",
+  "verification_record": "VERIFICATION.json"
+}

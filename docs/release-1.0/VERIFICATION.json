@@ -1,0 +1,109 @@
+{
+  "version": "1.0.0",
+  "date": "2026-10-31",
+  "package_verification": "PASS",
+  "feature_acceptance": "Product Owner accepted preview.5 and designated final version as production 1.0.",
+  "tested_package": "music-sheet-transposer-1.0.0",
+  "runtime": "system Python -I -B, from /tmp, bundled dependencies, no development server",
+  "application_changes_from_accepted_baseline": [
+    "frontend-v2/src/version.ts: version label only"
+  ],
+  "backend_application_unchanged": true,
+  "frontend_unit_tests": {
+    "passed": 63
+  },
+  "browser_package_regression": {
+    "passed": 133,
+    "failed": 0,
+    "skipped": 0,
+    "flaky": 0,
+    "duration_ms": 587746.997,
+    "report_sha256": "6ad9213d4896eb7c78c1a308434cb7fdf614555e2241eb2208bf4ecb16501962"
+  },
+  "lint": "PASS",
+  "typescript_and_vite_build": "PASS",
+  "package_integrity_and_abi": "PASS",
+  "saved_musicxml_after_restart": {
+    "concert": {
+      "sha256": "acba3960bc5eda6e339969c0ed91f68cff1bb363153a4401b0f615985e9cb034",
+      "notes": 9,
+      "retained_edit": true,
+      "exact_reimport": true
+    },
+    "alto": {
+      "sha256": "f41bf5e0107d982a22779b933690d13344c1438d1712ff1eeeba34ad97edaf01",
+      "notes": 9,
+      "retained_edit": true,
+      "exact_reimport": true
+    },
+    "soprano": {
+      "sha256": "e3acae70cdf7743697eea1bc498712af76a40560c8752d4281f820eb46034b1a",
+      "notes": 9,
+      "retained_edit": true,
+      "exact_reimport": true
+    },
+    "tenor": {
+      "sha256": "4c459ee4b510fbba541e290e53691cb863fd073439ce0c2ce82ef211f1a99b15",
+      "notes": 9,
+      "retained_edit": true,
+      "exact_reimport": true
+    }
+  },
+  "source_fixture_unchanged": true,
+  "fresh_local_omr": {
+    "status": "PASS",
+    "provider": "Audiveris",
+    "http_status": 200,
+    "elapsed_seconds": 72.93,
+    "recognized_note_count": 131,
+    "review_required": true,
+    "sample": "One previously authorized local PDF sample; not distributed.",
+    "accuracy_certified": false
+  },
+  "accepted_packages_unchanged": {
+    "music-sheet-transposer-classic-task06.1": {
+      "files": 866,
+      "mismatches": []
+    },
+    "music-sheet-transposer-ux-next-1.0.0-rc1-accepted": {
+      "files": 868,
+      "mismatches": []
+    },
+    "music-sheet-transposer-advanced-v1-preview5": {
+      "files": 868,
+      "mismatches": []
+    }
+  },
+  "personal_score_files_in_package": [],
+  "english_document_links": "PASS",
+  "technical_review": {
+    "status": "PASS",
+    "principles": [
+      "PC-02",
+      "PC-03",
+      "PC-04",
+      "PC-05",
+      "PC-06",
+      "PC-07",
+      "PC-08"
+    ],
+    "finding": "Release-only version metadata; accepted application source and dependency versions preserved. Launcher binds loopback and refuses occupied ports; old packages are retained. Design, architecture, recovery and known limits match inspected source."
+  },
+  "inherited_backend_evidence": {
+    "transposition_suite": 32,
+    "relationship_suite": 91,
+    "overlapping_section_tests": 8,
+    "rerun_for_this_promotion": false,
+    "reason": "Backend application hashes match accepted preview.5 exactly; packaged browser, restart and real OMR checks cover final runtime integration."
+  },
+  "non_failing_notices": [
+    "Existing Vite large-chunk build notice."
+  ],
+  "limits": [
+    "One-part/one-staff complete-measure append scope for Advanced sections.",
+    "No general OMR accuracy certification.",
+    "Local Ubuntu/Python ABI and external Audiveris/Java/OCR prerequisites remain.",
+    "No cloud deployment or durable score database."
+  ],
+  "status": "TECHNICALLY VERIFIED; production designation and feature acceptance recorded separately in ACCEPTANCE.json"
+}
