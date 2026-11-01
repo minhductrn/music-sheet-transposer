@@ -1,0 +1,28 @@
+{
+  "version": "1.0.2",
+  "archive": "/home/dtran/music-sheet-transposer-releases/music-sheet-transposer-1.0.2.tar.gz",
+  "sha256": "f2e1f8585e4591ca7dfcfd7a803bd7a5b24616f9d271437e16198a7acd5da62e",
+  "manifest_sha256": "81b25c28626c5c044cdc2291c6952bfc69355f5e5784f4f4aba0c283847c1cfe",
+  "relocated_archive_integrity_and_abi": "PASS",
+  "old_releases_preserved": true,
+  "release_tag": "v1.0.2",
+  "release_url": "https://github.com/minhductrn/music-sheet-transposer/releases/tag/v1.0.2",
+  "artifacts": [
+    {
+      "name": "music-sheet-transposer-1.0.2.tar.gz",
+      "sha256": "f2e1f8585e4591ca7dfcfd7a803bd7a5b24616f9d271437e16198a7acd5da62e",
+      "size_bytes": 12898844
+    },
+    {
+      "name": "music-sheet-transposer-1.0.2-docs.zip",
+      "sha256": "10da5f0a99280466668e5c7c07d557c629e46dd662454263e603388453ed47b7",
+      "size_bytes": 46380
+    },
+    {
+      "name": "music-sheet-transposer-1.0.2-SHA256SUMS.txt",
+      "sha256": "6f2ff92ff13e131b9e04313f291b5d8c4afa61d6e20243baeba4956ce9ba00d7",
+      "size_bytes": 206
+    }
+  ],
+  "documentation_distributed_separately": true
+}

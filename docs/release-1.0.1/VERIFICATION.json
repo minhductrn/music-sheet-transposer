@@ -1,0 +1,51 @@
+{
+  "status": "PASS",
+  "results": [
+    {
+      "name": "concert-G",
+      "centeredLyrics": 188,
+      "maxCenterError": 0.009246844911103835,
+      "musicalMutationRequests": 0,
+      "pageErrors": [],
+      "fixture": "Private local MusicXML sample: concert-G"
+    },
+    {
+      "name": "concert-Gb",
+      "centeredLyrics": 188,
+      "maxCenterError": 0.016410884369179257,
+      "musicalMutationRequests": 0,
+      "pageErrors": [],
+      "fixture": "Private local MusicXML sample: concert-Gb"
+    },
+    {
+      "name": "alto-down",
+      "centeredLyrics": 188,
+      "maxCenterError": 0.009246826171875,
+      "musicalMutationRequests": 0,
+      "pageErrors": [],
+      "fixture": "Private local MusicXML sample: alto-down"
+    }
+  ],
+  "version": "1.0.1",
+  "date": "2026-11-01",
+  "package_verification": "PASS",
+  "tested_package": "/home/dtran/music-sheet-transposer-releases/music-sheet-transposer-1.0.1",
+  "build": "PASS",
+  "lint": "PASS",
+  "frontend_unit_tests": {
+    "passed": 63,
+    "failed": 0
+  },
+  "lyric_font_scale": 0.85,
+  "original_release_integrity": {
+    "checked_files": 875,
+    "mismatches": []
+  },
+  "technical_review": "PASS: PDF-only metadata, font and clone transforms; no backend/music editing changes; PC-05/07/08",
+  "feature_acceptance": "ACCEPTED by Product Owner",
+  "limits": [
+    "Existing source text errors and dense lyric spacing remain outside scope.",
+    "Full OMR and transposition suites were not repeated: backend is byte-identical to accepted 1.0.0.",
+    "Three PDF export checks used real Concert G, Concert Gb and Alto MusicXML on the final standalone package."
+  ]
+}

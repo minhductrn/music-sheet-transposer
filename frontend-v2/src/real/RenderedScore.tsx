@@ -57,7 +57,7 @@ export function RenderedScore({ onMeasurePick,measureSelection=[],printCompact=f
         const parent=element.parentElement;if(parent){const css=getComputedStyle(parent);element.style.width=Math.max(1,parent.clientWidth-parseFloat(css.paddingLeft)-parseFloat(css.paddingRight))+'px';}
         const osmd = new OpenSheetMusicDisplay(element, { backend: 'svg', autoResize: false, drawTitle: true, drawComposer: true, drawPartNames: false, drawingParameters: 'default' });
 
-        if(printCompact){const rules=osmd.EngravingRules;rules.MinimumDistanceBetweenSystems=4;rules.VerticalBetweenLyricsDistance=0.25;rules.HorizontalBetweenLyricsDistance=0.15;rules.MinNoteDistance=1.5;}
+        if(printCompact){const rules=osmd.EngravingRules;rules.MinimumDistanceBetweenSystems=4;rules.VerticalBetweenLyricsDistance=0.25;rules.HorizontalBetweenLyricsDistance=0.15;rules.MinNoteDistance=1.5;rules.SoftmaxFactorVexFlow=3;}
 
         (async () => {
             try {
@@ -74,6 +74,20 @@ export function RenderedScore({ onMeasurePick,measureSelection=[],printCompact=f
             const verseRows = Math.max(1, new Set(review.score.lyrics.map(l => l.number)).size);
             for (const row of osmd.GraphicSheet.MeasureList) for (const measure of row) if (measure) for (const entry of measure.staffEntries) for (const lyric of entry.LyricsEntries) {
                 const node = lyric.GraphicalLabel.SVGNode as SVGGraphicsElement | null;
+                // PDF-only metadata: keep the existing engraving and locate the lyric's own voice head.
+                if (printCompact && node) {
+                    const voiceEntry = entry.graphicalVoiceEntries.find(v => v.parentVoiceEntry === lyric.LyricsEntry.Parent);
+                    const note = voiceEntry?.notes.find(n => !n.sourceNote.isRest()) as VexFlowGraphicalNote | undefined;
+                    const heads = note?.getNoteheadSVGs?.() ?? [];
+                    const head = heads[note?.vfnote?.[1] ?? note?.vfnoteIndex ?? 0];
+                    const svg = node.ownerSVGElement;
+                    const inverse = svg?.getScreenCTM()?.inverse();
+                    if (head && inverse) {
+                        const box = head.getBoundingClientRect();
+                        const center = new DOMPoint(box.x + box.width / 2, box.y).matrixTransform(inverse);
+                        node.setAttribute('data-pdf-note-center-x', String(center.x));
+                    }
+                }
                 const voice = String(lyric.LyricsEntry.Parent.ParentVoice.VoiceId);
                 const index = lyricVoices.indexOf(voice);
                 if (node && index > 0) {

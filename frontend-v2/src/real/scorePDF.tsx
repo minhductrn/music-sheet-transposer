@@ -40,6 +40,19 @@ async function generatePDF(review:Review,settings:PDFSettings,signal:AbortSignal
    template.querySelectorAll('text,tspan').forEach(t=>{t.setAttribute('font-family','DejaVuSerif');(t as SVGElement).style.fontFamily='DejaVuSerif';});
    const measure=document.createElement('div');container.append(measure);measure.append(template);
    try{
+    // Center only lyric ink on its own notehead after the export font is applied.
+    // Do not reflow systems, resize measures or alter the canonical MusicXML.
+    for (const lyric of template.querySelectorAll<SVGGraphicsElement>('[data-pdf-note-center-x]')) {
+     const texts=lyric.matches('text')?[lyric]:[...lyric.querySelectorAll<SVGGraphicsElement>('text')];
+     for(const text of texts){const size=parseFloat(getComputedStyle(text).fontSize);if(Number.isFinite(size)&&size>0){text.style.fontSize=String(size*0.85)+'px';}}
+     const box=inSVG(lyric,template),rootMatrix=template.getScreenCTM();
+     const parentInverse=(lyric.parentElement as unknown as SVGGraphicsElement)?.getScreenCTM()?.inverse();
+     if(!box||!rootMatrix||!parentInverse)continue;
+     const dx=Number(lyric.getAttribute('data-pdf-note-center-x'))-box.x-box.width/2;
+     const origin=new DOMPoint(0,0).matrixTransform(rootMatrix).matrixTransform(parentInverse);
+     const shifted=new DOMPoint(dx,0).matrixTransform(rootMatrix).matrixTransform(parentInverse);
+     lyric.setAttribute('transform',`translate(${shifted.x-origin.x},${shifted.y-origin.y}) `+(lyric.getAttribute('transform')??''));
+    }
     const ink=measureInk(template),width=template.viewBox.baseVal.width||template.width.baseVal.value,height=template.viewBox.baseVal.height||template.height.baseVal.value;
     const texts=[...template.querySelectorAll('text')].map(n=>inSVG(n,template));
     const bounds=settings.margins==='auto'?ink:{x:0,y:0,width,height:Math.min(height,ink.y+ink.height+12)};

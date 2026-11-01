@@ -1,0 +1,9 @@
+{
+  "version": "1.0.1",
+  "archive": "/home/dtran/music-sheet-transposer-releases/music-sheet-transposer-1.0.1.tar.gz",
+  "sha256": "29adb1a8335a91525c4dbf2201c307120fb584d3f2532d24123108c7dcca14ef",
+  "manifest_sha256": "ff58330d0d218f421bbb5b047967d29be26c325a552eafc5cad8b04ac9c0d850",
+  "relocated_archive_integrity_and_abi": "PASS",
+  "original_1_0_0_preserved": true,
+  "github_published_at_packaging": false
+}
