@@ -15,14 +15,16 @@
     },
     {
       "name": "music-sheet-transposer-1.0.2-docs.zip",
-      "sha256": "10da5f0a99280466668e5c7c07d557c629e46dd662454263e603388453ed47b7",
-      "size_bytes": 46380
+      "sha256": "a6e91ac0a251e8921f142c20a3dde28df3626d6f3eefc06615abda03a66c2b1a",
+      "size_bytes": 46545
     },
     {
       "name": "music-sheet-transposer-1.0.2-SHA256SUMS.txt",
-      "sha256": "6f2ff92ff13e131b9e04313f291b5d8c4afa61d6e20243baeba4956ce9ba00d7",
+      "sha256": "726e400b7d3b75034c3fd666073bc21d7853f8241c62c3947915fd4b7578f6e0",
       "size_bytes": 206
     }
   ],
-  "documentation_distributed_separately": true
+  "documentation_distributed_separately": true,
+  "publication_status": "Source branch pushed; PR #1 pending production promotion",
+  "pull_request_url": "https://github.com/minhductrn/music-sheet-transposer/pull/1"
 }
