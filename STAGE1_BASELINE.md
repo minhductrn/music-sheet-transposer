@@ -1,5 +1,7 @@
 # Accepted Stage 1 baseline — P0.9
 
+> Historical Stage 1 checkpoint. Current integrated production scope is [Release 1.0.2](docs/release-1.0.2/README.md); Stage 2 and later accepted features are described there.
+
 The Product Owner accepted P0.8B, confirmed the reopened Concert MusicXML score,
 and authorized this integrated Stage 1 checkpoint. Acceptance comes from that
 explicit decision, not from automated test results.

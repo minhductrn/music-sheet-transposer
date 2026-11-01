@@ -1,59 +1,70 @@
-# Music Sheet Transposer 1.0
+# Music Sheet Transposer 1.0.3
 
-**Version 1.0.0 is the Product Owner-designated local production release.** It promotes accepted UX Next Advanced Editing checkpoint `e8a6b24`, including the full-width Concert Key Preview. The production UI, frontend package and release manifest use version `1.0.0`.
+**Release 1.0.3 is the Product Owner-accepted local production maintenance version.** It adds accepted direct Text/header objects and retains the accepted UX Next, Advanced Editing v1 and PDF presentation defaults. Versions 1.0.0, 1.0.1 and 1.0.2 remain unchanged rollback packages.
 
 Import PDF/images through local OMR or open MusicXML directly, correct Working Score, save editable MusicXML, change Concert key, generate independent saxophone scores, and export MusicXML/PDF. Users decide musical content; OMR is a draft requiring correction.
 
-## Start production
+## Download and start
+
+Release 1.0.3 is Product Owner accepted for official local use. Package and publication evidence are recorded under docs/release-1.0.3. Extract into a new directory and retain all older packages.
 
 From Ubuntu WSL:
 
 ```bash
-python3 -B /home/dtran/music-sheet-transposer-releases/music-sheet-transposer-1.0.0/start.py --check
-python3 -B /home/dtran/music-sheet-transposer-releases/music-sheet-transposer-1.0.0/start.py --port 5250
+python3 -B /home/dtran/music-sheet-transposer-releases/music-sheet-transposer-1.0.3/start.py --check
+python3 -B /home/dtran/music-sheet-transposer-releases/music-sheet-transposer-1.0.3/start.py --port 5250
 ```
 
-Open **http://localhost:5250**. Keep the terminal open. Use Ctrl+C to stop after saving MusicXML. The package runs without a development server or source checkout. It requires the existing Ubuntu Linux/Python ABI, local Audiveris/Java and Vietnamese/English OCR models; it is not a universal Windows installer. The launcher installs nothing.
+Open **http://localhost:5250**. Keep the terminal open. Save MusicXML before Ctrl+C. Use another free `--port` if occupied. Updating the app does not require a WSL-wide shutdown or Docker. The header identifies version 1.0.3.
 
-Download the application archive, documentation bundle and checksums from the [GitHub 1.0.0 release](https://github.com/minhductrn/music-sheet-transposer/releases/tag/v1.0.0).
+The package needs the recorded Ubuntu/Python ABI and existing Audiveris, Java and Vietnamese/English OCR models. Node, source checkout and a development server are unnecessary at runtime. The launcher installs nothing. This is not a universal Windows installer or a cloud-hosted service.
 
-## Documentation
+## Current English documentation
 
 | Document | Purpose |
 | --- | --- |
-| [User guide](docs/release-1.0/USER_GUIDE.md) | Import, edit, save/recover, transpose and export |
-| [Product and UX design](docs/release-1.0/DESIGN.md) | Workflows, interactions, scope and acceptance |
-| [Architecture](docs/release-1.0/ARCHITECTURE.md) | Components, contracts, data and runtime |
-| [Operations](docs/release-1.0/OPERATIONS.md) | Startup, prerequisites, backup and rollback |
-| [Release notes](docs/release-1.0/RELEASE_NOTES.md) | Accepted scope, verification and limits |
-| [Acceptance](docs/release-1.0/ACCEPTANCE.json) | Product Owner production designation |
-| [Verification](docs/release-1.0/VERIFICATION.json) | Final package validation |
+| [Project specification](PROJECT_SPEC.md) | Consolidated accepted scope, exclusions and future limits |
+| [User guide](docs/release-1.0.3/USER_GUIDE.md) | Import, edit, save/recover, transpose and export |
+| [Product and UX design](docs/release-1.0.3/DESIGN.md) | Workflows, interactions and accepted PDF defaults |
+| [Architecture](docs/release-1.0.3/ARCHITECTURE.md) | Components, contracts, data and runtime |
+| [Operations](docs/release-1.0.3/OPERATIONS.md) | Prerequisites, startup, backup, updates and rollback |
+| [Release notes](docs/release-1.0.3/RELEASE_NOTES.md) | Maintenance scope and known limitations |
+| [Acceptance](docs/release-1.0.3/ACCEPTANCE.json) | Product Owner decision |
+| [Verification](docs/release-1.0.3/VERIFICATION.json) | Actual checks and testing limits |
 
 ## Capabilities
 
 - Read-only Original Source and editable Working Score; Compare/Edit Only retain the same composition tools in Stage 1 and Stage 2.
-- Direct note/rest editing, pitch, accidentals, duration/dots, voices/staff, size, grace notes, ties/slurs, supported tuplets/beams, lyrics/verses, text and chord symbols.
+- Direct note/rest editing, pitch, accidentals, durations/dots, voices/staff, size, grace notes, ties/slurs, supported tuplets/beams, lyrics/verses, text and user-authored chord symbols.
 - Concert Key: editable source/mode, destination, half-tone stepper, Up/Down and full-width Preview before Apply.
-- Independent Alto, Soprano and Tenor scores. Readable defaults: Alto Down −3 semitones, Soprano Up +2 and Tenor Down +2; standard Up registers remain available.
-- Key Change Section: select complete measures, preview a transposed copy and append it with a signature/double barline; Undo/Redo and save remain available.
-- Local MusicXML saving and A4 PDF preview/export, including fit-in-one-page and multi-page layouts.
+- Independent Alto, Soprano and Tenor scores. Readable defaults: Alto Down -3 semitones, Soprano Up +2 and Tenor Down +2; standard Up registers remain available.
+- Key Change Section: select complete measures, preview a transposed copy and append it with destination signature/double barline; Undo/Redo and MusicXML saving remain available.
+- Local MusicXML saving and A4 PDF preview/export, including one-page fit and multiple pages. PDF uses centered 85% lyrics and the accepted moderated rhythmic spacing; musical content and workspace rendering are unchanged.
 
-## Data and limitations
+## Data, exclusions and limits
 
-Retain MusicXML on your device; it is the recovery format. Review sessions and unsaved instrument variants are temporary. There is no durable score database, account service, automatic cloud storage or cloud deployment in release 1.0. PDF is a rendered output, not an editable backup.
+Retain Concert and desired instrument MusicXML on your device; it is the recovery format. Reviews, Undo history and unsaved instrument variants are temporary. There is no durable score database, account service, automatic cloud storage or current cloud deployment. PDF is not an editable backup. Unchanged imported MusicXML with sufficient key context may proceed to instruments without redundant Save; changed Concert content must be retained first.
 
-Advanced sections support one part/one staff and contiguous complete measures appended to the end. Boundary ties/slurs/tuplets must be complete. Multipart expansion, arbitrary middle paste and nested/cross-bar tuplet authoring are outside v1. OMR accuracy is not guaranteed, including legacy-font Vietnamese, keys and voice/verse associations. See release notes for limits.
+Advanced sections support one part/one staff and contiguous complete measures appended to the end. Boundary ties/slurs/tuplets must be complete. Arbitrary middle paste, partial-measure copying, general multipart expansion and nested/cross-bar tuplet authoring remain outside v1. OMR accuracy is not guaranteed, including legacy-font Vietnamese, key and voice/verse associations. Dense lyric collisions and some engraving gaps can remain; the accepted PDF maintenance is not a general layout guarantee. Other canceled PDF reflow trials are excluded.
 
-## Source and releases
+**Direct camera capture and Web Share API are excluded from continuing scope by Product Owner decision, not pending backlog.** Import existing image files and download MusicXML/PDF instead. Public hosting requires a separate approved design.
 
-Active application source: `frontend-v2/` and `backend/`. Legacy `frontend/` is retired and excluded from synchronization. Official tag: `v1.0.0`; release branch: `release/1.0`. The default GitHub branch is promoted by normal fast-forward after final checks; no history is rewritten.
+## Verification and release provenance
 
-Build in the existing development environment:
+See [verification](docs/release-1.0.3/VERIFICATION.json) for checks actually run and [acceptance](docs/release-1.0.3/ACCEPTANCE.json) for the Product Owner decision. Older records remain historical evidence. Active source is frontend-v2 and backend. Personal scores and local exports are excluded from Git.
+
+## Existing-host build
+
+The retained 1.0.2 package and installed development dependencies are required. No dependencies are installed automatically. Existing output paths are refused.
 
 ```bash
-python3 -B pilot-release/build_release_1_0.py --output /home/dtran/music-sheet-transposer-releases/music-sheet-transposer-1.0.0
+python3 -B pilot-release/build_release_1_0_3.py
+# Test the exact new package and record actual results before sealing.
+python3 -B pilot-release/build_release_1_0_3.py --seal
 ```
 
-The builder requires the retained accepted preview.5 package as its runtime baseline. It verifies that application source differs only in the version constant, refuses to overwrite output directories and installs no dependencies. Release archives and checksums live outside the repository.
+The builder restricts application differences from 1.0.2 to the accepted Text object implementation allowlist; it refuses existing outputs and installs no dependencies. For release history, see [1.0.0 records](docs/release-1.0/RELEASE_NOTES.md), [1.0.1 notes](docs/release-1.0.1/RELEASE_NOTES.md) and historical `pilot-release/` records. Product Owner acceptance remains distinct from passing tests.
 
-Classic Task06.1, UX Next RC1 and Advanced previews remain intact for rollback. Version 1.0.0 is the production version going forward. Historical records under `pilot-release/` describe earlier checkpoints.
+## Accepted 1.0.3 Text objects
+
+Choose Text, click a blank header location, type and press Enter. Drag a header object to reposition it. With Select active, click an object then Delete object. Equal strings remain separate objects. Undo/Redo restores edits. Save MusicXML to retain text/positions. PDF includes the visible header. Concert key changes label the score; Alto/Soprano/Tenor outputs include instrument labels. Original Source stays read-only.

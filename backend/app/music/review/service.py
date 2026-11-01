@@ -615,7 +615,12 @@ class ReviewService:
         if request.header_role:
             from .score_text import move_text_to_header
             return self.edit(identifier, revision, lambda doc, _: move_text_to_header(doc, text_id, request.text, request.header_role))
-        return self.edit(identifier, revision, lambda doc, _: patch_text(doc, text_id, request.text))
+        def operation(doc, _):
+            patch_text(doc, text_id, request.text)
+            if request.header_position is not None:
+                from .score_text import move_header_text
+                move_header_text(doc,text_id,request.header_position)
+        return self.edit(identifier, revision, operation)
 
     def score_text_add(self, identifier, revision, request: ScoreTextAdd):
         from .score_text import add_text

@@ -1,0 +1,71 @@
+{
+  "status": "PASS",
+  "results": [
+    {
+      "name": "concert-G",
+      "centeredLyrics": 188,
+      "maxCenterError": 0.009246844911103835,
+      "musicalMutationRequests": 0,
+      "pageErrors": [],
+      "fixture": "Private local MusicXML sample: concert-G"
+    },
+    {
+      "name": "concert-Gb",
+      "centeredLyrics": 188,
+      "maxCenterError": 0.016410884369179257,
+      "musicalMutationRequests": 0,
+      "pageErrors": [],
+      "fixture": "Private local MusicXML sample: concert-Gb"
+    },
+    {
+      "name": "alto-down",
+      "centeredLyrics": 188,
+      "maxCenterError": 0.009246826171875,
+      "musicalMutationRequests": 0,
+      "pageErrors": [],
+      "fixture": "Private local MusicXML sample: alto-down"
+    }
+  ],
+  "version": "1.0.2",
+  "date": "2026-11-01",
+  "package_verification": "PASS",
+  "tested_package": "/home/dtran/music-sheet-transposer-releases/music-sheet-transposer-1.0.2",
+  "build": "PASS",
+  "lint": "PASS",
+  "frontend_unit_tests": {
+    "passed": 63,
+    "failed": 0
+  },
+  "lyric_font_scale": 0.85,
+  "softmax_factor": 3,
+  "accepted_trial_pixels_identical": {
+    "concert-G": true,
+    "concert-Gb": true,
+    "alto-down": true
+  },
+  "comparison_note": "PNG file bytes differed; decoded RGB pixels match exactly in all three samples.",
+  "old_packages_integrity": {
+    "1.0.0": {
+      "checked_files": 875,
+      "mismatches": []
+    },
+    "1.0.1": {
+      "checked_files": 879,
+      "mismatches": []
+    }
+  },
+  "technical_review": "PASS: PDF-only engraving rule plus version metadata; no backend or musical edit changes. PC-05/07/08.",
+  "feature_acceptance": "ACCEPTED by Product Owner",
+  "limits": [
+    "PDF engraving is not generally collision-free.",
+    "Broad OMR and transposition suites not repeated; backend matches accepted baseline."
+  ],
+  "publication_checks": {
+    "date": "2026-11-01",
+    "documentation_relative_links": "PASS",
+    "application_source_matches_sealed_package": "PASS",
+    "lint": "PASS",
+    "unit_tests_passed": 63,
+    "bounded_pdf_verifier": "PASS"
+  }
+}

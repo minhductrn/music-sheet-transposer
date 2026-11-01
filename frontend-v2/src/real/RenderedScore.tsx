@@ -1,3 +1,4 @@
+import {renderScoreHeader,installHeaderDrag,type HeaderPosition} from './scoreHeader';
 import { renderPedalIdentities } from './pedalRendering';
 import { renderXML } from './renderXML';
 import { useEffect, useRef, useState } from 'react';
@@ -10,6 +11,9 @@ export type Curve = {
     direction: 'up' | 'down';
 };
 type Props = {
+    headerEditing?:boolean;
+    onHeader?:(box:DOMRect,position:HeaderPosition)=>void;
+    onTextMove?:(id:string,position:HeaderPosition)=>void;
     onMeasurePick?:(measure:string)=>void;
     measureSelection?:string[];
     printCompact?: boolean;
@@ -41,9 +45,9 @@ type Props = {
     onReady?: (count: number) => void;
 };
 // A head is interactive only when renderer semantics resolve exactly one XML event.
-export function RenderedScore({ onMeasurePick,measureSelection=[],printCompact=false, review, readOnly, fitVersion=0, zoom, selected, selection=[], boxSelect=false, onSelection, onHarmony, onHarmonyCandidates, onStaffContext, selectedText, selectedMark, onMark, onHead, onLyric, onText, onGap, onReady, onAmbiguous, onCurve, onAnchor }: Props) {
-    const host = useRef<HTMLDivElement>(null), live = useRef({ onMeasurePick,boxSelect, onSelection, onHarmony, onHarmonyCandidates, onStaffContext, selected, onMark, onHead, onLyric, onText, onGap, onReady, onAmbiguous, onCurve, onAnchor });
-    live.current = { onMeasurePick,boxSelect, onSelection, onHarmony, onHarmonyCandidates, onStaffContext, selected, onMark, onHead, onLyric, onText, onGap, onReady, onAmbiguous, onCurve, onAnchor };
+export function RenderedScore({ headerEditing=false,onTextMove,onHeader,onMeasurePick,measureSelection=[],printCompact=false, review, readOnly, fitVersion=0, zoom, selected, selection=[], boxSelect=false, onSelection, onHarmony, onHarmonyCandidates, onStaffContext, selectedText, selectedMark, onMark, onHead, onLyric, onText, onGap, onReady, onAmbiguous, onCurve, onAnchor }: Props) {
+    const host = useRef<HTMLDivElement>(null), live = useRef({ onTextMove,onHeader,onMeasurePick,boxSelect, onSelection, onHarmony, onHarmonyCandidates, onStaffContext, selected, onMark, onHead, onLyric, onText, onGap, onReady, onAmbiguous, onCurve, onAnchor });
+    live.current = { onTextMove,onHeader,onMeasurePick,boxSelect, onSelection, onHarmony, onHarmonyCandidates, onStaffContext, selected, onMark, onHead, onLyric, onText, onGap, onReady, onAmbiguous, onCurve, onAnchor };
     const fitted=useRef(0);
     const scrollPosition=useRef({top:0,left:0});
     const [error, setError] = useState(''), [width, setWidth] = useState(0);
@@ -57,7 +61,7 @@ export function RenderedScore({ onMeasurePick,measureSelection=[],printCompact=f
         const parent=element.parentElement;if(parent){const css=getComputedStyle(parent);element.style.width=Math.max(1,parent.clientWidth-parseFloat(css.paddingLeft)-parseFloat(css.paddingRight))+'px';}
         const osmd = new OpenSheetMusicDisplay(element, { backend: 'svg', autoResize: false, drawTitle: true, drawComposer: true, drawPartNames: false, drawingParameters: 'default' });
 
-        if(printCompact){const rules=osmd.EngravingRules;rules.MinimumDistanceBetweenSystems=4;rules.VerticalBetweenLyricsDistance=0.25;rules.HorizontalBetweenLyricsDistance=0.15;rules.MinNoteDistance=1.5;}
+        if(printCompact){const rules=osmd.EngravingRules;rules.MinimumDistanceBetweenSystems=4;rules.VerticalBetweenLyricsDistance=0.25;rules.HorizontalBetweenLyricsDistance=0.15;rules.MinNoteDistance=1.5;rules.SoftmaxFactorVexFlow=3;}
 
         (async () => {
             try {
@@ -69,11 +73,28 @@ export function RenderedScore({ onMeasurePick,measureSelection=[],printCompact=f
                 // before both native notation and canonical curve geometry are rendered.
                 osmd.Zoom = zoom;
                 if(readOnly)osmd.render();else renderPedalIdentities(osmd);
+                const pageSVG=element.querySelector<SVGSVGElement>('svg');
+                if(pageSVG)renderScoreHeader(pageSVG,review,!readOnly&&headerEditing,(box,position)=>live.current.onHeader?.(box,position));
+
                 // Separate lyric rows by voice in the derived view; never merge or rewrite XML syllables.
             const lyricVoices = [...new Set(events(review).filter(e => e.lyric_ids.length).map(e => e.voice))].sort();
             const verseRows = Math.max(1, new Set(review.score.lyrics.map(l => l.number)).size);
             for (const row of osmd.GraphicSheet.MeasureList) for (const measure of row) if (measure) for (const entry of measure.staffEntries) for (const lyric of entry.LyricsEntries) {
                 const node = lyric.GraphicalLabel.SVGNode as SVGGraphicsElement | null;
+                // PDF-only metadata: keep the existing engraving and locate the lyric's own voice head.
+                if (printCompact && node) {
+                    const voiceEntry = entry.graphicalVoiceEntries.find(v => v.parentVoiceEntry === lyric.LyricsEntry.Parent);
+                    const note = voiceEntry?.notes.find(n => !n.sourceNote.isRest()) as VexFlowGraphicalNote | undefined;
+                    const heads = note?.getNoteheadSVGs?.() ?? [];
+                    const head = heads[note?.vfnote?.[1] ?? note?.vfnoteIndex ?? 0];
+                    const svg = node.ownerSVGElement;
+                    const inverse = svg?.getScreenCTM()?.inverse();
+                    if (head && inverse) {
+                        const box = head.getBoundingClientRect();
+                        const center = new DOMPoint(box.x + box.width / 2, box.y).matrixTransform(inverse);
+                        node.setAttribute('data-pdf-note-center-x', String(center.x));
+                    }
+                }
                 const voice = String(lyric.LyricsEntry.Parent.ParentVoice.VoiceId);
                 const index = lyricVoices.indexOf(voice);
                 if (node && index > 0) {
@@ -425,15 +446,17 @@ export function RenderedScore({ onMeasurePick,measureSelection=[],printCompact=f
                     }
                     for (const text of review.score.texts ?? []) {
                         const normalize=(value:string)=>value.normalize('NFC').replace(/\s+/gu,' ').trim();
-                        const matches=(review.score.texts??[]).filter(t=>normalize(t.text)===normalize(text.text));
-                        if(new Set(matches.map(t=>t.id)).size!==1){
+                        const matches=(review.score.texts??[]).filter(t=>normalize(t.text)===normalize(text.text)&&!['printed_mst-header','output_heading'].includes(t.role));
+                        const explicit=element.querySelector<SVGTextElement>('svg text[data-text-id="'+CSS.escape(text.id)+'"]');
+                        if(!explicit&&new Set(matches.map(t=>t.id)).size!==1){
                             // One composer may appear in both metadata and the printed credit.
                             // Bind that explicit pair once, without guessing among unrelated text.
                             const composer=matches.length===2&&matches.some(t=>t.role==='composer')&&matches.some(t=>t.role==='printed_composer')&&text.role==='printed_composer';
                             const title=matches.length>=2&&matches.length<=3&&new Set(matches.map(t=>t.role)).size===matches.length&&matches.every(t=>['movement_title','work_title','printed_title','credit'].includes(t.role))&&matches.some(t=>['movement_title','work_title'].includes(t.role))&&matches.filter(t=>['printed_title','credit'].includes(t.role)).length===1&&['printed_title','credit'].includes(text.role);
                             if(!composer&&!title)continue;
                         }
-                        const nodes=[...element.querySelectorAll<SVGTextElement>('svg text')].filter(n=>{
+                        const nodes=explicit?[explicit]:[...element.querySelectorAll<SVGTextElement>('svg text')].filter(n=>{
+                            if(n.hasAttribute('data-header-region'))return false;
                             const whole=normalize(n.textContent??''),part=normalize(text.text);
                             if(whole===part)return true;
                             // OSMD can merge adjacent direction words into one SVG text node.
@@ -459,6 +482,7 @@ export function RenderedScore({ onMeasurePick,measureSelection=[],printCompact=f
                             rect.setAttribute('x',String(from.x-2));rect.setAttribute('y',String(from.y-2));rect.setAttribute('width',String(to.x-from.x+4));rect.setAttribute('height',String(to.y-from.y+4));rect.setAttribute('fill','transparent');rect.setAttribute('stroke','transparent');hit.append(rect);
                             hit.style.cursor='text';hit.setAttribute('data-testid','real-text-'+text.id+(copy?'-copy-'+copy:''));hit.setAttribute('data-text-id',text.id);hit.setAttribute('tabindex','0');hit.setAttribute('role','button');hit.setAttribute('aria-label','Score text '+text.text);
                             hit.onpointerdown=e=>e.stopPropagation();hit.onclick=e=>{e.stopPropagation();live.current.onText?.(text.id,bounds);};hit.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();live.current.onText?.(text.id,bounds);}};
+                            if(node.hasAttribute("data-header-region"))installHeaderDrag(hit,node,svg,position=>live.current.onTextMove?.(text.id,position));
                             svg.append(hit);
                         }
                     }
@@ -478,7 +502,7 @@ export function RenderedScore({ onMeasurePick,measureSelection=[],printCompact=f
             }
         })();
         return () => { disposed = true; const viewport=element.parentElement;if(viewport)scrollPosition.current={top:viewport.scrollTop,left:viewport.scrollLeft};element.replaceChildren(); };
-    }, [review, readOnly, zoom, width,fitVersion,printCompact,!!onMeasurePick,measureSelection.join(",")]);
+    }, [review, readOnly, zoom, width,fitVersion,printCompact,headerEditing,!!onMeasurePick,measureSelection.join(",")]);
     useEffect(() => { host.current?.querySelectorAll('[data-event-id]').forEach(n => { const active = n.getAttribute('data-event-id') === selected || selection.includes(n.getAttribute('data-event-id')??''); n.classList.toggle('real-selected', active); n.setAttribute('aria-pressed', String(active)); }); }, [selected, selection, review, zoom]);
     useEffect(()=>{host.current?.querySelectorAll('[data-text-id]').forEach(n=>{n.classList.toggle('real-object-selected',n.getAttribute('data-text-id')===selectedText);});},[selectedText,review,zoom]);
     useEffect(()=>{host.current?.querySelectorAll('[data-mark-id]').forEach(n=>{n.setAttribute('stroke',n.getAttribute('data-mark-id')===selectedMark?'#1769b5':'transparent');});},[selectedMark,review,zoom]);

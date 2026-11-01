@@ -210,14 +210,21 @@ class TripletReplacement(Request):
         return self
 
 
+class HeaderPosition(Request):
+    x: float = Field(ge=0, le=1, allow_inf_nan=False)
+    y: float = Field(ge=0, le=1, allow_inf_nan=False)
+
+
 class TextPatch(Request):
+    header_position: HeaderPosition | None = None
     header_role: Literal["composer", "lyricist"] | None = None
     text: str = Field(max_length=2000)
     segment_index: StrictInt = Field(default=0, ge=0, le=100)
 
 
 class ScoreTextAdd(Request):
-    role: Literal["work_title", "movement_title", "composer", "lyricist", "credit", "direction"]
+    header_position: HeaderPosition | None = None
+    role: Literal["work_title", "movement_title", "composer", "lyricist", "credit", "direction", "header"]
     text: str = Field(min_length=1, max_length=2000)
     event_id: str | None = Field(default=None, min_length=1, max_length=128)
 

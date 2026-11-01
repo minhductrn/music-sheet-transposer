@@ -1,0 +1,11 @@
+{
+  "version": "1.0.1",
+  "date": "2026-11-01",
+  "authority": "Product Owner",
+  "status": "ACCEPTED",
+  "scope": "PDF-only lyric centering and 85% font size; updated project specification exclusions",
+  "evidence": "User: ok giữ mức setting font chữ này, update cho ban release 1.0",
+  "base_release": "1.0.0",
+  "canceled_pdf_trials_included": false,
+  "package_verification": "See VERIFICATION.json; feature acceptance is distinct from package verification."
+}

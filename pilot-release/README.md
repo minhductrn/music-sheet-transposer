@@ -1,5 +1,7 @@
 # Task 03 — Independent local pilot packaging
 
+> Historical Task 03 packaging record. For current production use [Release 1.0.2 documentation](../docs/release-1.0.2/README.md) and the root README. Older guides and task receipts are retained as historical evidence.
+
 Application baseline: bcac2d889da59406cefb0824a589ce20564b699a (accepted Task 01/02).
 
 ## User handoff

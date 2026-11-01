@@ -1,10 +1,64 @@
 """Independent preserved score text. No lyric classification or ownership inference."""
 from xml.etree import ElementTree as ET
+import json
+import math
 
 from .document import ReviewError, local
 
 
+def page_size(doc):
+    def value(tag, fallback):
+        node = next(doc.root.iter(doc.namespace + tag), None)
+        try:
+            result = float(node.text) if node is not None else fallback
+            return result if math.isfinite(result) and result > 0 else fallback
+        except (TypeError, ValueError):
+            return fallback
+    return value('page-width',1190), value('page-height',1684)
+
+
+def header_position(doc, node, role):
+    try:
+        if role == 'output_heading':
+            field = next((n for n in doc.root.iter(doc.namespace+'miscellaneous-field') if n.get('name')=='mst-output-heading-position'),None)
+            result = json.loads(field.text) if field is not None else None
+        elif role == 'printed_mst-header' and node.get('default-x') is not None and node.get('default-y') is not None:
+            width,height=page_size(doc)
+            result={'x':float(node.get('default-x'))/width,'y':(height-float(node.get('default-y')))/(height*0.2)}
+        else:
+            return None
+        if isinstance(result,dict) and all(isinstance(result.get(k),(int,float)) and math.isfinite(result[k]) and 0<=result[k]<=1 for k in ('x','y')):
+            return result
+    except (ValueError, TypeError, json.JSONDecodeError):
+        pass
+    return None
+
+
+def move_header_text(doc, identifier, position):
+    node=text_node(doc,identifier)
+    entry=next(t for t in project_texts(doc) if t['id']==identifier)
+    if entry['role']=='output_heading':
+        parent=doc.parent(node)
+        field=next((n for n in parent if n.get('name')=='mst-output-heading-position'),None)
+        if field is None:
+            field=ET.SubElement(parent,doc.namespace+'miscellaneous-field',{'name':'mst-output-heading-position'})
+        field.text=json.dumps({'x':position.x,'y':position.y},separators=(',',':'))
+    elif entry['role']=='printed_mst-header':
+        width,height=page_size(doc)
+        node.set('default-x',str(position.x*width))
+        node.set('default-y',str(height-position.y*height*0.2))
+    else:
+        raise ReviewError('Only header text objects can be moved within the header.')
+    doc.changed=True
+
+
 def project_texts(doc):
+    # Expose the app-owned output label as a stable text object. XML remains metadata.
+    heading = next((n for n in doc.root.iter(doc.namespace + 'miscellaneous-field') if n.get('name') == 'mst-output-heading'), None)
+    if heading is not None:
+        doc.refs['output-heading'] = heading
+    else:
+        doc.refs.pop('output-heading', None)
     ids = {node: key for key, node in doc.refs.items()}
     parents = {child: parent for parent in doc.root.iter() for child in parent}
     result = []
@@ -13,7 +67,9 @@ def project_texts(doc):
         if parent is None:
             continue
         role = None
-        if tag == 'work-title' and local(parent.tag) == 'work':
+        if tag == 'miscellaneous-field' and node.get('name') == 'mst-output-heading':
+            role = 'output_heading'
+        elif tag == 'work-title' and local(parent.tag) == 'work':
             role = 'work_title'
         elif tag == 'movement-title' and parent is doc.root:
             role = 'movement_title'
@@ -38,7 +94,7 @@ def project_texts(doc):
             context = parents.get(context)
         result.append({'id': key, 'role': role, 'text': node.text or '', 'editable': not len(node),
                        'measure_id': ids.get(measure), 'measure_number': measure.get('number') if measure is not None else None,
-                       'part_id': ids.get(part), 'staff': doc.text(direction, 'staff', '1') if direction is not None else None})
+                       'header_position': header_position(doc,node,role), 'part_id': ids.get(part), 'staff': doc.text(direction, 'staff', '1') if direction is not None else None})
     return result
 
 
@@ -137,11 +193,15 @@ def add_text(doc, identifier, request):
         parent.insert(next((i for i, c in enumerate(parent) if local(c.tag) != 'creator'), len(parent)), node)
     else:
         parent = ET.Element(doc.namespace + 'credit', {'page': '1'})
+        if role == 'header':
+            ET.SubElement(parent, doc.namespace + 'credit-type').text = 'mst-header'
         node = ET.SubElement(parent, doc.namespace + 'credit-words')
         index = next((i for i, c in enumerate(doc.root) if local(c.tag) in ('part-list', 'part')), len(doc.root))
         doc.root.insert(index, parent)
     node.text = request.text
     doc.refs[identifier] = node
+    if getattr(request, 'header_position', None) is not None:
+        move_header_text(doc,identifier,request.header_position)
     doc.changed = True
 
 

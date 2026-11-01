@@ -1,0 +1,3 @@
+# Release 1.0.3 technical review
+
+The bounded source delta was reviewed against PC-02/03/05/06/07/08. Header coordinates and text use existing revision/history commands; musical identity restrictions remain. Native rendering suppresses only application header copies, while canonical MusicXML retains Text. Stable IDs distinguish legacy and new equal strings. The package reuses the sealed 1.0.2 runtime and copies current backend application code and built frontend. All actual test counts and limits are in VERIFICATION.json. The Product Owner explicitly accepted the behavior before release authorization.
