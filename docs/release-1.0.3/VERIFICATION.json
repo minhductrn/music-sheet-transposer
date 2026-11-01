@@ -1,0 +1,43 @@
+{
+  "version": "1.0.3",
+  "date": "2026-11-01",
+  "status": "PASS",
+  "package_verification": "PASS",
+  "tested_package": "/home/dtran/music-sheet-transposer-releases/music-sheet-transposer-1.0.3",
+  "build": "PASS",
+  "lint": "PASS",
+  "frontend_unit_tests": {
+    "passed": 63,
+    "failed": 0
+  },
+  "backend_tests": {
+    "passed": 1124,
+    "skipped": 3,
+    "failed": 0
+  },
+  "packaged_browser_tests": {
+    "passed": 11,
+    "failed": 0,
+    "scope": "Direct Text in Compare/Edit Only; Concert labels, Undo/Redo, MusicXML and PDF; Alto/Soprano/Tenor labels; header addition/edit/deletion in both stages; drag position persistence and reimport; equal legacy/new Text deletion independently."
+  },
+  "technical_review": {
+    "status": "PASS",
+    "principles": [
+      "PC-02",
+      "PC-03",
+      "PC-05",
+      "PC-06",
+      "PC-07",
+      "PC-08"
+    ],
+    "notes": "Explicit Text identities and revision-checked edits reviewed. Source remains read-only. No unrelated application files differ from the package baseline outside the bounded allowlist."
+  },
+  "package_integrity_and_abi": "PASS",
+  "limitations": [
+    "Three backend cases skipped by existing suite conditions; not counted as PASS.",
+    "No new general OMR accuracy certification.",
+    "External MusicXML applications may lay out custom header objects differently.",
+    "Build reports existing large bundle warnings; backend reports dependency deprecation warnings.",
+    "Old packages and running user sessions preserved."
+  ]
+}

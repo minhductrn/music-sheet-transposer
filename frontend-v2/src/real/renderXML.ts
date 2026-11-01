@@ -7,6 +7,12 @@ export function renderXML(xml:string){
  const ns=doc.documentElement.namespaceURI;
  const children=(e:Element,n:string)=>[...e.children].filter(c=>c.localName===n);
  let changed=false;
+ // Application header objects are drawn once by the interactive header layer.
+ // Keep them in the saved document, but omit native credit rendering duplicates.
+ for(const credit of children(doc.documentElement,'credit')){
+  if(children(credit,'credit-type').some(n=>n.textContent==='mst-header')){credit.remove();changed=true;}
+ }
+
  for(const part of children(doc.documentElement,'part')){
   const first=children(part,'measure')[0];if(!first)continue;
   const initial:Element[]=[];for(const node of first.children){if(['note','forward','backup'].includes(node.localName))break;if(node.localName==='attributes')initial.push(node);}

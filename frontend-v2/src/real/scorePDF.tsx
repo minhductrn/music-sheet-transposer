@@ -55,7 +55,8 @@ async function generatePDF(review:Review,settings:PDFSettings,signal:AbortSignal
     }
     const ink=measureInk(template),width=template.viewBox.baseVal.width||template.width.baseVal.value,height=template.viewBox.baseVal.height||template.height.baseVal.value;
     const texts=[...template.querySelectorAll('text')].map(n=>inSVG(n,template));
-    const bounds=settings.margins==='auto'?ink:{x:0,y:0,width,height:Math.min(height,ink.y+ink.height+12)};
+    const top=Math.min(0,template.viewBox.baseVal.y);
+    const bounds=settings.margins==='auto'?ink:{x:0,y:top,width,height:Math.min(top+height,ink.y+ink.height+12)-top};
     const breaks=JSON.parse(template.getAttribute('data-pdf-breaks')??'[]') as number[];
     const plan=planA4(bounds,settings,breaks,texts.filter((b):b is InkBounds=>!!b).map(b=>({top:b.y,bottom:b.y+b.height})));
     for(const {source,target} of plan.pages){

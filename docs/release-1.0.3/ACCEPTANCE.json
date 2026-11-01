@@ -1,0 +1,15 @@
+{
+  "version": "1.0.3",
+  "date": "2026-11-01",
+  "status": "ACCEPTED",
+  "authority": "Product Owner",
+  "evidence": "Explicit user acceptance followed by authorization to commit, push and promote as official release.",
+  "principles": [
+    "PC-02",
+    "PC-03",
+    "PC-05",
+    "PC-06",
+    "PC-07",
+    "PC-08"
+  ]
+}

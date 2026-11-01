@@ -155,3 +155,41 @@ def test_user_moves_measure_text_to_composer_header_atomically(workflow):
     assert next(t for t in after['score']['texts'] if t['id']==text['id'])['role']=='composer'
     assert xml(request(client,after,'undo').json())==xml(before)
     assert ET.fromstring(xml(create(client,xml(after)))).findtext('./identification/creator')=='Composer example'
+
+
+def test_header_is_independent_editable_object_with_history_and_roundtrip(score):
+    service, before = score
+    original = ET.fromstring(XML)
+    created = service.score_text_add(before['id'], before['revision'], ScoreTextAdd(role='header', text='Arranged for Sunday'))
+    item = next(t for t in created['score']['texts'] if t['role'] == 'printed_mst-header')
+    assert item['measure_id'] is None
+    changed = service.score_text_patch(created['id'], created['revision'], item['id'], TextPatch(text='Edited header'))
+    reopened = service.create(xml(service, changed))
+    assert any(t['role'] == 'printed_mst-header' and t['text'] == 'Edited header' for t in reopened['score']['texts'])
+    edited = ET.fromstring(xml(service, changed))
+    assert [ET.tostring(n) for n in original.findall('.//m:note', NS)] == [ET.tostring(n) for n in edited.findall('.//m:note', NS)]
+    assert changed['score']['lyrics'] == before['score']['lyrics']
+    deleted = service.score_text_delete(changed['id'], changed['revision'], item['id'])
+    assert not any(t['role'] == 'printed_mst-header' for t in deleted['score']['texts'])
+    restored = service.history(deleted['id'], deleted['revision'], 'undo')
+    assert any(t['text'] == 'Edited header' for t in restored['score']['texts'])
+
+
+def test_output_heading_is_selectable_text_and_correction_keeps_its_identity(score):
+    service, before = score
+    # Adding only metadata through correction must not weaken musical object checks.
+    tree = ET.fromstring(XML)
+    identification = tree.find('m:identification', NS)
+    miscellaneous = ET.SubElement(identification, '{urn:text}miscellaneous')
+    ET.SubElement(miscellaneous, '{urn:text}miscellaneous-field', {'name': 'mst-output-heading'}).text = 'Concert key: C major'
+    created = service.document_correction(before['id'], before['revision'], ET.tostring(tree))
+    item = next(t for t in created['score']['texts'] if t['role'] == 'output_heading')
+    assert item['id'] == 'output-heading'
+    changed = service.score_text_patch(created['id'], created['revision'], item['id'], TextPatch(text='My arrangement'))
+    reopened = service.create(xml(service, changed))
+    assert any(t['id'] == 'output-heading' and t['text'] == 'My arrangement' for t in reopened['score']['texts'])
+    deleted = service.score_text_delete(changed['id'], changed['revision'], item['id'])
+    assert not any(t['role'] == 'output_heading' for t in deleted['score']['texts'])
+    assert deleted['score']['lyrics'] == before['score']['lyrics']
+    restored = service.history(deleted['id'], deleted['revision'], 'undo')
+    assert any(t['text'] == 'My arrangement' for t in restored['score']['texts'])

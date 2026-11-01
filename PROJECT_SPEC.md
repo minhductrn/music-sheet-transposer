@@ -108,3 +108,9 @@ Current maintained application source is `frontend-v2/` and `backend/app/`. Lega
 Use relevant automated checks, build/lint and technical source review. For musical changes, verify supported persistence and relationships. For presentation-only PDF changes, verify unchanged musical content, note geometry and source MusicXML, plus final PDF rendering. Recorded Release 1.0 test results are historical evidence, not proof that a new candidate passed. Final acceptance remains with the Product Owner.
 
 Published release documents and acceptance/verification receipts under `docs/release-1.0/` preserve the historical 1.0 baseline. Maintenance evidence is recorded under its own version directory and must not overwrite historical acceptance records. Commit/push and release publication require Product Owner authorization.
+
+## Accepted 1.0.3 extension
+
+Direct Text objects occupy existing header whitespace without adding rows or moving staves. Click Text then the header, type and press Enter. Drag within the header. Select an object to edit/delete. Generated Concert-key and instrument labels use the same interaction. Stage 1/2 and Compare/Edit Only share the tools.
+
+The Product Owner accepted this extension on 2026-11-01. Current design, architecture, operations, user guide and bounded verification are under docs/release-1.0.3. Historical baselines remain unchanged.
