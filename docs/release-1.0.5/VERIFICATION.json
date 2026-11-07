@@ -1,0 +1,1 @@
+{"package_verification":"PASS","checks":["Lint, build, launcher integrity and ABI","Firefox on packaged app: deleted measure 7 text and two unmatched octave shifts from reconstructed fixture; notes preserved and measure 15 text retained"],"limits":"Targeted smoke test; full suite not rerun."}
