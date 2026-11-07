@@ -99,6 +99,7 @@ export type Review = {
             id: string;
             role: string;
             text: string;
+            measure_number?: string | null;
             header_position?: {x:number;y:number}|null;
             event_id?: string;
         }[];

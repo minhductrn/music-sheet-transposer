@@ -1,11 +1,26 @@
 """Explicit editable identities for non-note pedal marks; no music inference."""
+from collections import Counter
 from fractions import Fraction
 from .document import local,ReviewError
 from .importer import rational
 
+EDITABLE_MARKS = ('pedal', 'dynamics', 'wedge', 'metronome', 'segno', 'coda')
+
+def orphan_octave_shifts(doc, part):
+ shifts = [
+  (mark, (doc.text(direction, 'staff', '1'), mark.get('number', '1')))
+  for measure in doc.children(part, 'measure')
+  for direction in doc.children(measure, 'direction')
+  for kind in doc.children(direction, 'direction-type')
+  for mark in doc.children(kind, 'octave-shift')
+ ]
+ counts = Counter(key for _, key in shifts)
+ return {mark for mark, key in shifts if counts[key] == 1 and mark.get('type') in ('up', 'down')}
+
 def marks(doc):
  result=[];reverse={node:key for key,node in doc.refs.items()}
  for part in doc.children(doc.root,'part'):
+  orphans=orphan_octave_shifts(doc,part)
   scale=Fraction(1)
   for measure in doc.children(part,'measure'):
    cursor=Fraction(0)
@@ -22,8 +37,8 @@ def marks(doc):
     elif tag=='direction':
      for j,kind in enumerate(doc.children(node,'direction-type')):
       for k,pedal in enumerate(kind):
-       if local(pedal.tag) not in ('pedal','dynamics','wedge','metronome','segno','coda'):continue
-       result.append({'id':f'{reverse[measure]}:{i}:{j}:{k}','kind':local(pedal.tag),'measure_id':reverse[measure],'onset':str(cursor+(rational(doc.text(node,'offset','0')) or 0)/scale) if cursor is not None and scale else None,'staff':int(doc.text(node,'staff','1')) if doc.text(node,'staff','1').isdigit() else None,'type':pedal.get('type','') or ' '.join(local(c.tag) for c in pedal)})
+       if local(pedal.tag) not in EDITABLE_MARKS and pedal not in orphans:continue
+       result.append({'id':f'{reverse[measure]}:{i}:{j}:{k}','kind':local(pedal.tag),'measure_id':reverse[measure],'onset':str(cursor+(rational(doc.text(node,'offset','0')) or 0)/scale) if cursor is not None and scale else None,'staff':int(doc.text(node,'staff','1')) if doc.text(node,'staff','1').isdigit() else None,'type':f"{pedal.get('size','8')} {pedal.get('type')} #{pedal.get('number','1')}" if pedal in orphans else pedal.get('type','') or ' '.join(local(c.tag) for c in pedal)})
  return result
 
 def delete_mark(doc,identifier):
@@ -32,7 +47,11 @@ def delete_mark(doc,identifier):
   if any(int(v)<0 for v in (i,j,k)):raise ValueError('Invalid mark index')
   measure=doc.get(mid,'measure');direction=list(measure)[int(i)];kind=doc.children(direction,'direction-type')[int(j)];mark=list(kind)[int(k)]
  except (ValueError,IndexError):raise ReviewError('The selected score mark no longer exists.',409) from None
- if local(direction.tag)!='direction' or local(mark.tag) not in ('pedal','dynamics','wedge','metronome','segno','coda'):raise ReviewError('The selected object is not an editable score mark.',409)
+ is_orphan = local(mark.tag) == 'octave-shift' and any(
+  mark in orphan_octave_shifts(doc, part) for part in doc.children(doc.root, 'part')
+ )
+ if local(direction.tag) != 'direction' or (local(mark.tag) not in EDITABLE_MARKS and not is_orphan):
+  raise ReviewError('The selected object is not an editable score mark.', 409)
  kind.remove(mark)
  # Remove playback attributes belonging to this deleted symbol, while retaining
  # independent tempo and other sound data. Do not affect a surviving same-kind mark.
