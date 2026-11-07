@@ -1,1 +1,1 @@
-export const UX_NEXT_VERSION = '1.0.3';
+export const UX_NEXT_VERSION = '1.0.4';

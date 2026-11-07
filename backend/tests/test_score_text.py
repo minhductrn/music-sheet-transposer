@@ -193,3 +193,36 @@ def test_output_heading_is_selectable_text_and_correction_keeps_its_identity(sco
     assert deleted['score']['lyrics'] == before['score']['lyrics']
     restored = service.history(deleted['id'], deleted['revision'], 'undo')
     assert any(t['text'] == 'My arrangement' for t in restored['score']['texts'])
+
+
+def test_printed_lyricist_pair_edit_move_delete_and_history(score):
+    from app.music.review.models import HeaderPosition
+    service, _ = score
+    original = XML.replace(b'<credit-type>composer</credit-type>', b'<credit-type>lyricist</credit-type>').replace('Printed credit'.encode(), 'Lời'.encode())
+    before = service.create(original)
+    changed = service.score_text_patch(before['id'], before['revision'], 'c-1', TextPatch(text='CN.Truyền giáo'))
+    pair = [t for t in changed['score']['texts'] if t['role'] in ('lyricist', 'printed_lyricist')]
+    assert len(pair) == 2 and all(t['text'] == 'CN.Truyền giáo' for t in pair)
+    moved = service.score_text_patch(changed['id'], changed['revision'], 'c-1', TextPatch(text='CN.Truyền giáo', header_position=HeaderPosition(x=0.2, y=0.3)))
+    header = next(t for t in moved['score']['texts'] if t['id'] == 'c-1')
+    assert header['role'] == 'printed_mst-header'
+    assert header['header_position'] == pytest.approx({'x':0.2,'y':0.3})
+    assert not any(t['role'] == 'lyricist' for t in moved['score']['texts'])
+    reopened = service.create(xml(service, moved))
+    assert any(t['text'] == 'CN.Truyền giáo' and t['header_position'] for t in reopened['score']['texts'])
+    deleted = service.score_text_delete(moved['id'], moved['revision'], 'c-1')
+    assert not any(t['text'] == 'CN.Truyền giáo' for t in deleted['score']['texts'])
+    undo = service.history(deleted['id'], deleted['revision'], 'undo')
+    assert any(t['text'] == 'CN.Truyền giáo' for t in undo['score']['texts'])
+
+
+def test_tie_picker_projection_matches_existing_pair_validation(score):
+    from app.music.review.importer import import_score
+    from app.music.review.ties import entries_for, targets, tie_info
+    service, review = score
+    doc = service.store.get(review['id']).document
+    score_model, _ = import_score(doc)
+    entries = entries_for(score_model)
+    projected = tie_info(doc, score_model)
+    for identifier in entries:
+        assert projected[identifier]['tie_target_ids'] == targets(doc, identifier, entries)

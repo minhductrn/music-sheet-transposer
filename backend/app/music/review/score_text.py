@@ -48,7 +48,13 @@ def move_header_text(doc, identifier, position):
         node.set('default-x',str(position.x*width))
         node.set('default-y',str(height-position.y*height*0.2))
     else:
-        raise ReviewError('Only header text objects can be moved within the header.')
+        if entry['role'] not in ('direction', 'credit', 'composer', 'lyricist', 'printed_composer', 'printed_lyricist'):
+            raise ReviewError('Select an independent text annotation to move to the header.')
+        from types import SimpleNamespace
+        text = node.text or ''
+        delete_text(doc, identifier)
+        add_text(doc, identifier, SimpleNamespace(role='header', text=text, event_id=None))
+        move_header_text(doc, identifier, position)
     doc.changed=True
 
 
@@ -104,6 +110,18 @@ def text_node(doc, identifier):
     return doc.refs[identifier]
 
 
+def paired_header_ids(doc, identifier):
+    text_node(doc, identifier)
+    entries = project_texts(doc)
+    selected = next(entry for entry in entries if entry['id'] == identifier)
+    for role in ('composer', 'lyricist'):
+        pair = [entry for entry in entries if entry['text'] == selected['text']
+                and entry['role'] in (role, 'printed_' + role)]
+        if selected['role'] in (role, 'printed_' + role) and len(pair) == 2 and {entry['role'] for entry in pair} == {role, 'printed_' + role}:
+            return [entry['id'] for entry in pair]
+    return [identifier]
+
+
 def patch_text(doc, identifier, text):
     node = text_node(doc, identifier)
     if len(node):
@@ -114,11 +132,12 @@ def patch_text(doc, identifier, text):
     selected=next(entry for entry in entries if entry['id']==identifier)
     # Synchronize only an exact, unique metadata/printed composer pair.
     # Unrelated equal strings and multiple credits remain independent.
-    matches=[entry for entry in entries if entry['text']==node.text and entry['role'] in ('composer','printed_composer')]
-    if selected['role'] in ('composer','printed_composer') and len(matches)==2 and {entry['role'] for entry in matches}=={'composer','printed_composer'}:
-        for entry in matches:
-            partner=doc.refs[entry['id']]
-            if not len(partner):partner.text=text
+    partners = paired_header_ids(doc, identifier)
+    if len(partners) == 2:
+        for partner_id in partners:
+            partner = doc.refs[partner_id]
+            if not len(partner):
+                partner.text = text
     else:
         title_roles={'movement_title','work_title','printed_title','credit'}
         titles=[entry for entry in entries if entry['text']==node.text and entry['role'] in title_roles]
@@ -133,6 +152,18 @@ def patch_text(doc, identifier, text):
 
 
 def delete_text(doc, identifier):
+    partners = paired_header_ids(doc, identifier)
+    if len(partners) == 2:
+        # Remove the printed representation first so metadata cannot recreate it.
+        printed = next(key for key in partners if local(doc.parent(doc.refs[key]).tag) == 'credit')
+        metadata = next(key for key in partners if key != printed)
+        _delete_text(doc, printed)
+        _delete_text(doc, metadata)
+        return
+    _delete_text(doc, identifier)
+
+
+def _delete_text(doc, identifier):
     node = text_node(doc, identifier)
     parent = doc.parent(node)
     if local(parent.tag) == 'direction-type':

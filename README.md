@@ -1,21 +1,21 @@
-# Music Sheet Transposer 1.0.3
+# Music Sheet Transposer 1.0.4
 
-**Release 1.0.3 is the Product Owner-accepted local production maintenance version.** It adds accepted direct Text/header objects and retains the accepted UX Next, Advanced Editing v1 and PDF presentation defaults. Versions 1.0.0, 1.0.1 and 1.0.2 remain unchanged rollback packages.
+**The Music Sheet Transposer web application is complete and Product Owner accepted. Release 1.0.4 is the local production version.** Hosting is a separate lift-and-shift assessment.
 
 Import PDF/images through local OMR or open MusicXML directly, correct Working Score, save editable MusicXML, change Concert key, generate independent saxophone scores, and export MusicXML/PDF. Users decide musical content; OMR is a draft requiring correction.
 
 ## Download and start
 
-Release 1.0.3 is Product Owner accepted for official local use. Package and publication evidence are recorded under docs/release-1.0.3. Extract into a new directory and retain all older packages.
+Release 1.0.4 is Product Owner accepted for official local use. Package and publication evidence are recorded under docs/release-1.0.4. Extract into a new directory and retain all older packages.
 
 From Ubuntu WSL:
 
 ```bash
-python3 -B /home/dtran/music-sheet-transposer-releases/music-sheet-transposer-1.0.3/start.py --check
-python3 -B /home/dtran/music-sheet-transposer-releases/music-sheet-transposer-1.0.3/start.py --port 5250
+python3 -B /home/dtran/music-sheet-transposer-releases/music-sheet-transposer-1.0.4/start.py --check
+python3 -B /home/dtran/music-sheet-transposer-releases/music-sheet-transposer-1.0.4/start.py --port 5250
 ```
 
-Open **http://localhost:5250**. Keep the terminal open. Save MusicXML before Ctrl+C. Use another free `--port` if occupied. Updating the app does not require a WSL-wide shutdown or Docker. The header identifies version 1.0.3.
+Open **http://localhost:5250**. Keep the terminal open. Save MusicXML before Ctrl+C. Use another free `--port` if occupied. Updating the app does not require a WSL-wide shutdown or Docker. The header identifies version 1.0.4.
 
 The package needs the recorded Ubuntu/Python ABI and existing Audiveris, Java and Vietnamese/English OCR models. Node, source checkout and a development server are unnecessary at runtime. The launcher installs nothing. This is not a universal Windows installer or a cloud-hosted service.
 
@@ -24,13 +24,19 @@ The package needs the recorded Ubuntu/Python ABI and existing Audiveris, Java an
 | Document | Purpose |
 | --- | --- |
 | [Project specification](PROJECT_SPEC.md) | Consolidated accepted scope, exclusions and future limits |
-| [User guide](docs/release-1.0.3/USER_GUIDE.md) | Import, edit, save/recover, transpose and export |
-| [Product and UX design](docs/release-1.0.3/DESIGN.md) | Workflows, interactions and accepted PDF defaults |
-| [Architecture](docs/release-1.0.3/ARCHITECTURE.md) | Components, contracts, data and runtime |
-| [Operations](docs/release-1.0.3/OPERATIONS.md) | Prerequisites, startup, backup, updates and rollback |
-| [Release notes](docs/release-1.0.3/RELEASE_NOTES.md) | Maintenance scope and known limitations |
-| [Acceptance](docs/release-1.0.3/ACCEPTANCE.json) | Product Owner decision |
-| [Verification](docs/release-1.0.3/VERIFICATION.json) | Actual checks and testing limits |
+| [User guide](docs/release-1.0.4/USER_GUIDE.md) | Import, edit, save/recover, transpose and export |
+| [Product and UX design](docs/release-1.0.4/DESIGN.md) | Workflows, interactions and accepted PDF defaults |
+| [Architecture](docs/release-1.0.4/ARCHITECTURE.md) | Components, contracts, data and runtime |
+| [Operations](docs/release-1.0.4/OPERATIONS.md) | Prerequisites, startup, backup, updates and rollback |
+| [Release notes](docs/release-1.0.4/RELEASE_NOTES.md) | Maintenance scope and known limitations |
+| [Acceptance](docs/release-1.0.4/ACCEPTANCE.json) | Product Owner decision |
+| [Verification](docs/release-1.0.4/VERIFICATION.json) | Actual checks and testing limits |
+
+## Release 1.0.4 changes
+
+- Edit, delete or move imported lyricist text to the header.
+- Delete unwanted rests while preserving the timing of other notes. Insertion markers appear above the staff with transparent fill.
+- Load tie candidates more efficiently on larger scores.
 
 ## Capabilities
 
@@ -51,20 +57,20 @@ Advanced sections support one part/one staff and contiguous complete measures ap
 
 ## Verification and release provenance
 
-See [verification](docs/release-1.0.3/VERIFICATION.json) for checks actually run and [acceptance](docs/release-1.0.3/ACCEPTANCE.json) for the Product Owner decision. Older records remain historical evidence. Active source is frontend-v2 and backend. Personal scores and local exports are excluded from Git.
+See [verification](docs/release-1.0.4/VERIFICATION.json) for checks actually run and [acceptance](docs/release-1.0.4/ACCEPTANCE.json) for the Product Owner decision. Older records remain historical evidence. Active source is frontend-v2 and backend. Personal scores and local exports are excluded from Git.
 
 ## Existing-host build
 
-The retained 1.0.2 package and installed development dependencies are required. No dependencies are installed automatically. Existing output paths are refused.
+The retained 1.0.3 package and installed development dependencies are required. No dependencies are installed automatically. Existing output paths are refused.
 
 ```bash
-python3 -B pilot-release/build_release_1_0_3.py
+python3 -B pilot-release/build_release_1_0_4.py
 # Test the exact new package and record actual results before sealing.
-python3 -B pilot-release/build_release_1_0_3.py --seal
+python3 -B pilot-release/build_release_1_0_4.py --seal
 ```
 
 The builder restricts application differences from 1.0.2 to the accepted Text object implementation allowlist; it refuses existing outputs and installs no dependencies. For release history, see [1.0.0 records](docs/release-1.0/RELEASE_NOTES.md), [1.0.1 notes](docs/release-1.0.1/RELEASE_NOTES.md) and historical `pilot-release/` records. Product Owner acceptance remains distinct from passing tests.
 
-## Accepted 1.0.3 Text objects
+## Accepted 1.0.4 Text objects
 
 Choose Text, click a blank header location, type and press Enter. Drag a header object to reposition it. With Select active, click an object then Delete object. Equal strings remain separate objects. Undo/Redo restores edits. Save MusicXML to retain text/positions. PDF includes the visible header. Concert key changes label the score; Alto/Soprano/Tenor outputs include instrument labels. Original Source stays read-only.

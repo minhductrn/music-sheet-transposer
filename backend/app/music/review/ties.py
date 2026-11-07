@@ -322,13 +322,20 @@ def set_direction(doc, source_id, direction):
 def tie_info(doc, score):
     entries = entries_for(score)
     current = {key: current_target(doc, key, entries) for key in entries}
-    result = {}
-    for key in entries:
-        error = None
+    # Endpoint eligibility is independent of the source/target pairing.
+    # Validate each endpoint once per projection, preserving picker order.
+    errors = {}
+    eligible_by_part = {}
+    for key, (part, _, _) in entries.items():
         try:
             check_link_source(doc, key, entries)
+            errors[key] = None
+            eligible_by_part.setdefault(part.id, []).append(key)
         except ReviewError as issue:
-            error = str(issue)
+            errors[key] = str(issue)
+    result = {}
+    for key, (part, _, _) in entries.items():
+        error = errors[key]
         link = doc.manual_ties.get(key)
         direction, direction_editable = None, False
         try:
@@ -338,7 +345,7 @@ def tie_info(doc, score):
             pass
         result[key] = {"tie_target_id": current[key], "tie_correction_error": error, "tie_source_editable": error is None,
                        "tie_direction": direction, "tie_direction_editable": direction_editable,
-                       "tie_target_ids": [] if error else targets(doc, key, entries),
+                       "tie_target_ids": [] if error else [target for target in eligible_by_part.get(part.id, []) if target != key],
                        "tie_relationship": {"source_event_id": key, "target_event_id": link["target"], "origin": link.get("origin", "USER_CORRECTION"), "source_visual_id": link["source_visual_id"], "target_visual_id": link["target_visual_id"]} if link and link.get("target") in entries and link.get("source_visual_id") else None}
     return result
 

@@ -344,7 +344,7 @@ export function RenderedScore({ headerEditing=false,onTextMove,onHeader,onMeasur
                             for (const gap of canonical.insertion_gaps ?? []) {
                                 if (gap.staff !== staffNumber)
                                     continue;
-                                const x = positionAt(rational(gap.onset)), y = top + spacing * 2;
+                                const x = positionAt(rational(gap.onset)), y = top - spacing * 2;
                                 const g = document.createElementNS(svgNS, 'g');
                                 g.setAttribute('data-gap-anchor', 'true');
                                 g.setAttribute('data-testid', `real-gap-${canonical.id}-${gap.voice}-${gap.onset}`);
@@ -356,7 +356,7 @@ export function RenderedScore({ headerEditing=false,onTextMove,onHeader,onMeasur
                                 rect.setAttribute('y', String(y - 10));
                                 rect.setAttribute('width', '18');
                                 rect.setAttribute('height', '20');
-                                rect.setAttribute('fill', '#f3f8fc');
+                                rect.setAttribute('fill', 'transparent');
                                 rect.setAttribute('stroke', '#6489a7');
                                 rect.setAttribute('stroke-dasharray', '3 2');
                                 g.append(rect);
@@ -451,7 +451,7 @@ export function RenderedScore({ headerEditing=false,onTextMove,onHeader,onMeasur
                         if(!explicit&&new Set(matches.map(t=>t.id)).size!==1){
                             // One composer may appear in both metadata and the printed credit.
                             // Bind that explicit pair once, without guessing among unrelated text.
-                            const composer=matches.length===2&&matches.some(t=>t.role==='composer')&&matches.some(t=>t.role==='printed_composer')&&text.role==='printed_composer';
+                            const composer=['composer','lyricist'].some(role=>matches.length===2&&matches.some(t=>t.role===role)&&matches.some(t=>t.role==='printed_'+role)&&text.role==='printed_'+role);
                             const title=matches.length>=2&&matches.length<=3&&new Set(matches.map(t=>t.role)).size===matches.length&&matches.every(t=>['movement_title','work_title','printed_title','credit'].includes(t.role))&&matches.some(t=>['movement_title','work_title'].includes(t.role))&&matches.filter(t=>['printed_title','credit'].includes(t.role)).length===1&&['printed_title','credit'].includes(text.role);
                             if(!composer&&!title)continue;
                         }

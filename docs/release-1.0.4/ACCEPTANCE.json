@@ -1,0 +1,15 @@
+{
+  "version": "1.0.4",
+  "date": "2026-11-07",
+  "status": "ACCEPTED",
+  "authority": "Product Owner",
+  "evidence": "Product Owner confirmed all preview functions met requirements and authorized production packaging and GitHub publication.",
+  "principles": [
+    "PC-02",
+    "PC-03",
+    "PC-05",
+    "PC-06",
+    "PC-07",
+    "PC-08"
+  ]
+}
