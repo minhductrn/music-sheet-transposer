@@ -1,0 +1,13 @@
+{
+  "version": "1.0.6",
+  "date": "2026-11-15",
+  "status": "ACCEPTED",
+  "authority": "Product Owner",
+  "evidence": "The Product Owner confirmed the playback update meets requirements and requested packaging and GitHub publication.",
+  "principles": [
+    "PC-05",
+    "PC-06",
+    "PC-07",
+    "PC-08"
+  ]
+}
