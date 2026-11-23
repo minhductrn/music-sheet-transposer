@@ -17,3 +17,8 @@ OMR accuracy is not guaranteed. Unresolvable timing/unsupported command shapes a
 Extract the archive into a new directory. From Ubuntu WSL, run `python3 -B /home/dtran/music-sheet-transposer-releases/music-sheet-transposer-1.0.7/start.py --check`, then use `--port 5250` (or another free port). Windows users can run `Start-Production.ps1` from the extracted package. Existing Ubuntu/Python ABI, Audiveris/Java and vie/eng models are required; the launcher installs nothing. Save MusicXML before closing an older session.
 
 The exact package passed 23 browser regressions and launcher integrity/ABI checks. The archive SHA-256 is supplied as a separate asset. Older releases are preserved.
+
+
+## Windows direct launcher
+
+Download `Start-Production-1.0.7.cmd` and extract the tar archive into `/home/dtran/music-sheet-transposer-releases/music-sheet-transposer-1.0.7` in Ubuntu WSL. The .cmd starts that installed path and avoids unsigned PowerShell-script execution. No Windows execution policy needs changing. The .cmd is supplied separately; the sealed tar archive is unchanged.

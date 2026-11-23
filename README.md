@@ -15,6 +15,14 @@ python3 -B /home/dtran/music-sheet-transposer-releases/music-sheet-transposer-1.
 python3 -B /home/dtran/music-sheet-transposer-releases/music-sheet-transposer-1.0.7/start.py --port 5250
 ```
 
+Windows PowerShell can invoke the installed release without running a PowerShell script:
+
+```powershell
+wsl.exe -d Ubuntu --exec /usr/bin/python3 -B /home/dtran/music-sheet-transposer-releases/music-sheet-transposer-1.0.7/start.py --port 5250
+```
+
+The separate [Windows launcher](https://github.com/minhductrn/music-sheet-transposer/releases/download/v1.0.7/Start-Production-1.0.7.cmd) runs this installed path directly. It does not change PowerShell execution policy. Extract the package into the recorded directory first.
+
 Open **http://localhost:5250**. Keep the terminal open. Save MusicXML before Ctrl+C. Use another free `--port` if occupied. Updating the app does not require a WSL-wide shutdown or Docker. The header identifies version 1.0.7.
 
 The package needs the recorded Ubuntu/Python ABI and existing Audiveris, Java and Vietnamese/English OCR models. Node, source checkout and a development server are unnecessary at runtime. The launcher installs nothing. This is not a universal Windows installer or a cloud-hosted service.

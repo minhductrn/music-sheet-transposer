@@ -15,5 +15,10 @@
     "Packaged Firefox browser suite: 23 passed in 47.5 seconds",
     "Coverage: beam selection; unconditional byte-exact Save after Validate; same-voice draft overlap; six lyric layout/original verse identity checks; five drag/drop cases; sequential insertion and Undo/Redo; voice alignment and movement",
     "Package starts independently with /usr/bin/python3 -I -B; UI built with version 1.0.7"
-  ]
+  ],
+  "windows_launcher_addendum": {
+    "cmd_check": "PASS: Start-Production-1.0.7.cmd --check",
+    "powershell_ps1": "Host requires signed PowerShell scripts; direct execution was blocked. No policy was changed. Use the separate .cmd or direct wsl.exe command.",
+    "sealed_archive_changed": false
+  }
 }

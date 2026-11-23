@@ -1,0 +1,15 @@
+{
+  "version": "1.0.7",
+  "published": true,
+  "release_url": "https://github.com/minhductrn/music-sheet-transposer/releases/tag/v1.0.7",
+  "tag_commit": "05709c60af0fd3c5b9f4028a74fc70b623500917",
+  "archive_sha256_verified_against_github": "0b6fc37d2f75aa0883731d267df5f3f2edf44377e56590cf879532061ad12bf7",
+  "assets": [
+    "music-sheet-transposer-1.0.7.tar.gz",
+    "music-sheet-transposer-1.0.7.tar.gz.sha256",
+    "Start-Production-1.0.7.cmd"
+  ],
+  "launcher_check": "PASS from Windows .cmd",
+  "running_verified_package_url": "http://localhost:5326",
+  "older_running_sessions_preserved": true
+}
