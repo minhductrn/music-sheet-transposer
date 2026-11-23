@@ -1,6 +1,6 @@
 {
   "version": "1.0.7",
-  "package_verification": "PENDING",
+  "package_verification": "PASS",
   "source_checks": [
     "Backend full suite: 1135 passed, 3 skipped; additional focused correction tests passed",
     "Frontend unit suite: 71 passed",
@@ -8,5 +8,12 @@
     "Final lyric tests: 6 passed; canonical bytes and original verse IDs retained",
     "Lint and build passed; existing bundle-size warning"
   ],
-  "limits": "Package-specific verification pending. Source checks were run across the implementation; no claim of a complete full-browser suite. No independent external reviewer sign-off is recorded."
+  "limits": "Three backend tests were skipped in the recorded full source run. Existing dependency deprecation and frontend bundle-size warnings remain. Full legacy browser suite and PDF recognition were not rerun on this package; OMR/runtime components are retained from the verified baseline. No independent external reviewer sign-off is recorded.",
+  "source_checkpoint": "6386dea",
+  "package_checks": [
+    "Exact packaged launcher integrity and Python ABI: PASS",
+    "Packaged Firefox browser suite: 23 passed in 47.5 seconds",
+    "Coverage: beam selection; unconditional byte-exact Save after Validate; same-voice draft overlap; six lyric layout/original verse identity checks; five drag/drop cases; sequential insertion and Undo/Redo; voice alignment and movement",
+    "Package starts independently with /usr/bin/python3 -I -B; UI built with version 1.0.7"
+  ]
 }

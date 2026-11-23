@@ -1,0 +1,14 @@
+{
+  "version": "1.0.7",
+  "date": "2026-11-22",
+  "acceptance": "ACCEPTED",
+  "package_verification": "PASS",
+  "application_source_checkpoint": "6386dea",
+  "archive": "music-sheet-transposer-1.0.7.tar.gz",
+  "archive_sha256": "0b6fc37d2f75aa0883731d267df5f3f2edf44377e56590cf879532061ad12bf7",
+  "manifest_sha256": "7c321b4041b68cf71d4c94044f44313d21c3a28a3e4158ca953cdc04089051b0",
+  "release_url": "https://github.com/minhductrn/music-sheet-transposer/releases/tag/v1.0.7",
+  "runtime_command": "python3 -B /home/dtran/music-sheet-transposer-releases/music-sheet-transposer-1.0.7/start.py --port 5250",
+  "verification_port": 5326,
+  "prior_packages_preserved": true
+}
