@@ -24,7 +24,7 @@ def edit_tuplet(doc, identifier, request):
         raise ReviewError('Select every member of each chord.')
     nodes.sort(key=lambda n:list(measure).index(n))
     indexes = [list(measure).index(n) for n in nodes]
-    if indexes != list(range(indexes[0],indexes[0]+len(nodes))):
+    if not request.draft_edit and indexes != list(range(indexes[0],indexes[0]+len(nodes))):
         raise ReviewError('Select consecutive rhythmic positions; intervening objects are preserved.')
     groups=[]
     for n in nodes:
@@ -34,7 +34,7 @@ def edit_tuplet(doc, identifier, request):
     first=events[0]
     if any(e.kind not in ('note','rest') or e.grace or e.cue or e.voice!=first.voice or e.staff!=first.staff or rational(e.onset) is None or rational(e.duration) is None for e in events):
         raise ReviewError('Select timed notes or rests in one voice and staff.')
-    if any(rational(b.onset)!=rational(a.onset)+rational(a.duration) for a,b in zip(events,events[1:])):
+    if not request.draft_edit and any(rational(b.onset)!=rational(a.onset)+rational(a.duration) for a,b in zip(events,events[1:])):
         raise ReviewError('Select contiguous rhythmic positions.')
     # Reject incomplete, nested or ambiguous existing membership, including groups
     # whose boundaries lie outside this selection.
@@ -46,20 +46,20 @@ def edit_tuplet(doc, identifier, request):
             number=mark.get('number','1');kind=mark.get('type')
             if kind=='start':
                 if n in selected:
-                    if active:raise ReviewError('Nested tuplets are not supported by this editor.')
+                    if active and not request.draft_edit:raise ReviewError('Nested tuplets are not supported by this editor.')
                     starts.append(mark)
                 active[number]=n
             elif kind=='stop':
                 owner=active.pop(number,None)
                 if n in selected:
-                    if owner not in selected:raise ReviewError('Select the complete existing tuplet.')
+                    if owner not in selected and not request.draft_edit:raise ReviewError('Select the complete existing tuplet.')
                     stops.append(mark)
-                elif owner in selected:raise ReviewError('Select the complete existing tuplet.')
-        if n in selected and any(owner not in selected for owner in active.values()):
+                elif owner in selected and not request.draft_edit:raise ReviewError('Select the complete existing tuplet.')
+        if not request.draft_edit and n in selected and any(owner not in selected for owner in active.values()):
             raise ReviewError('Select the complete enclosing tuplet.')
-    if any(owner in selected for owner in active.values()):raise ReviewError('The tuplet has no matching end.')
+    if not request.draft_edit and any(owner in selected for owner in active.values()):raise ReviewError('The tuplet has no matching end.')
     modified=[n for n in nodes if doc.child(n,'time-modification') is not None]
-    if modified and (len(modified)!=len(nodes) or len(starts)!=1 or len(stops)!=1):
+    if not request.draft_edit and modified and (len(modified)!=len(nodes) or len(starts)!=1 or len(stops)!=1):
         raise ReviewError('Select exactly one complete, non-nested tuplet.')
     if request.action=='remove' and not modified:
         raise ReviewError('Select an existing tuplet to remove its ratio.')
@@ -75,11 +75,11 @@ def edit_tuplet(doc, identifier, request):
             raise ReviewError('Chord members must have matching written durations.')
         written.append(value)
     measure_id=next(k for k,v in doc.refs.items() if v is measure)
-    info,_,scale=position_context(doc,measure_id)
+    info,_,scale=position_context(doc,measure_id,request.draft_edit)
     onset=rational(first.onset);old_span=sum((rational(e.duration) for e in events),Fraction())
     ratio=Fraction(1) if request.action=='remove' else Fraction(request.normal_notes,request.actual_notes)
     if request.action=='split':
-        if len(groups)!=1 or modified:raise ReviewError('Select one ordinary note, chord or rest to divide.')
+        if len(groups)!=1 or (modified and not request.draft_edit):raise ReviewError('Select one ordinary note, chord or rest to divide.')
         base=old_span/request.normal_notes
         if base not in VALUES.values():raise ReviewError('This span and ratio need unsupported written values; choose another ratio or edit a mixed selection.')
         written=[base]*request.actual_notes
@@ -95,7 +95,7 @@ def edit_tuplet(doc, identifier, request):
         for e in voice.events:
             if e.id in request.event_ids or e.voice!=first.voice or e.grace:continue
             start,duration=rational(e.onset),rational(e.duration)
-            if start is not None and duration is not None and onset<start+duration and start<onset+new_span:
+            if not request.draft_edit and start is not None and duration is not None and onset<start+duration and start<onset+new_span:
                 raise ReviewError('The new tuplet would overlap another event. Choose space or adjust the selection first.')
     factor=lcm(*[(v*scale).denominator for v in effective+written+[onset,old_span,new_span]])
     scale=refine_divisions(doc,measure,scale,factor)
@@ -135,7 +135,19 @@ def edit_tuplet(doc, identifier, request):
             marks=put(doc,members[0],'notations')
             if i==0:ET.SubElement(marks,doc.namespace+'tuplet',{'type':'start','number':'1','bracket':request.bracket,'placement':request.placement,'show-number':request.show_number})
             if i==len(groups)-1:ET.SubElement(marks,doc.namespace+'tuplet',{'type':'stop','number':'1'})
-    delta=old_span-new_span
+    # Draft ratio edits change only selected durations, not the onsets of
+    # interleaved/unselected notes or the other independently timed voices.
+    if request.draft_edit and request.action!='split':
+        for members,event,duration in zip(groups,events,effective):
+            if doc.child(members[0],'chord') is not None:continue
+            delta=rational(event.duration)-duration
+            if delta:
+                shift=ET.Element(doc.namespace+('forward' if delta>0 else 'backup'))
+                ET.SubElement(shift,doc.namespace+'duration').text=xml_units(abs(delta)*scale)
+                measure.insert(list(measure).index(members[-1])+1,shift)
+        delta=Fraction(0)
+    else:
+        delta=old_span-new_span
     if delta:
         shift=ET.Element(doc.namespace+('forward' if delta>0 else 'backup'))
         ET.SubElement(shift,doc.namespace+'duration').text=xml_units(abs(delta)*scale)

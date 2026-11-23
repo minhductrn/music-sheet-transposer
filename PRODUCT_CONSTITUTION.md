@@ -54,3 +54,9 @@ Previously accepted features must remain functional. A new feature cannot be con
 ## PC-08 — Product Owner authority
 
 The Product Owner approves product requirements and final functional acceptance. The Technical Lead owns architecture, scope, implementation specifications, and technical review. Codex implements authorized changes and reports evidence. Codex must not independently redefine approved product requirements.
+
+## PC-09 — User-directed saving and non-blocking correction
+
+Product Owner requirement confirmed 2026-11-22: the original score is the user's correction reference; OMR is not an authority for rejecting the user's edits. Each voice may have its own rhythm, independently of other voices. Temporary musical/rhythmic conflicts must not prevent ordinary draft positioning or insertion, and the application must not silently switch voices to avoid a conflict.
+
+Validate is optional and explicitly user-invoked. If the user chooses Save or Save As, persist the current score as edited even if musical validation reports errors. Do not require successful validation, musical verification, source-comparison attestation or key declaration to save, and do not automatically correct or normalize musical content as part of saving. Report actual file-write failures honestly; they are distinct from musical diagnostics. This requirement supersedes earlier verification-gated Save behavior for the developing editor.

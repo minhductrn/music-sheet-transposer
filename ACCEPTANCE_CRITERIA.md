@@ -48,3 +48,14 @@ For each relevant item, record evidence and the result, or explain why it is not
 - [ ] Relevant regression tests, lint, and build pass with recorded evidence.
 - [ ] Technical Lead review is recorded.
 - [ ] Product Owner acceptance of applicable user-visible behavior is explicitly recorded.
+
+## Mandatory user-directed-save checks (PC-09)
+
+- [ ] A review with musical/technical music diagnostics can be saved without a successful Validate or verify operation.
+- [ ] User-invoked Validate does not remove the right to Save afterward.
+- [ ] Saved/downloaded bytes match the current review bytes exactly unless the user separately requests a content transformation.
+- [ ] Save does not require key declaration or source-comparison attestation and does not insert musical declarations automatically.
+- [ ] Draft insertion/movement retains the user-chosen voice and supports temporary rhythmic conflicts without moving other notes.
+- [ ] Independent voices are not summed into one measure-capacity total.
+
+These requirements are Product Owner-directed changes recorded on 2026-11-22; automated PASS remains separate from user acceptance.

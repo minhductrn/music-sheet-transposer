@@ -119,6 +119,7 @@ class PitchInput(Request):
 
 
 class EventPatch(Request):
+    draft_edit: StrictBool = False
     accidental_scope_measure: StrictBool = False
     tie_direction: Literal["up", "down"] | None = None
     duration_scope: Literal["note", "chord"] = "chord"
@@ -135,6 +136,7 @@ class EventPatch(Request):
 
 
 class EventAdd(Request):
+    draft_edit: StrictBool = False
     same_onset_id: str | None = Field(default=None, min_length=1, max_length=128)
     onset: str | None = Field(default=None, max_length=32)
     written_accidental: Literal["flat-flat", "flat", "natural", "sharp", "double-sharp"] | None = None
@@ -158,6 +160,7 @@ class TripletSelection(Request):
 
 
 class TripletEdit(Request):
+    draft_edit: StrictBool = False
     actual_notes: StrictInt = Field(default=3, ge=2, le=16)
     normal_notes: StrictInt = Field(default=2, ge=1, le=16)
     measure_id: str = Field(min_length=1, max_length=128)
@@ -185,6 +188,7 @@ class TripletEdit(Request):
 
 
 class TupletWork(Request):
+    draft_edit: StrictBool = False
     event_ids: list[str] = Field(min_length=1, max_length=128)
     action: Literal['apply', 'split', 'remove'] = 'apply'
     actual_notes: StrictInt = Field(default=3, ge=2, le=16)
@@ -288,6 +292,8 @@ class SourceConfirmation(Request):
 
 
 class EventMove(Request):
+    draft_edit: StrictBool = False
+    detach_beam: StrictBool = False
     measure_id: str = Field(min_length=1, max_length=128)
     onset: str = Field(min_length=1, max_length=32)
     voice: str = Field(min_length=1, max_length=32, pattern=r"^\S+$")

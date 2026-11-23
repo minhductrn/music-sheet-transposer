@@ -305,12 +305,20 @@ class ReviewService:
             for key, node in doc.refs.items():
                 if node in members and shared:
                     doc.manual_changes[key] = sorted(set(doc.manual_changes.get(key, [])) | shared)
-            doc.manual_changes[event_id] = sorted(set(doc.manual_changes.get(event_id, [])) | (patch.model_fields_set - {"preserve_onsets"}))
+            doc.manual_changes[event_id] = sorted(set(doc.manual_changes.get(event_id, [])) | (patch.model_fields_set - {"preserve_onsets", "draft_edit"}))
         return self.edit(identifier, revision, operation)
 
     def event_move(self, identifier, revision, event_id, request):
         def operation(doc, _):
-            from .patcher import move_event
+            from .patcher import move_event, position_context
+            from .importer import rational
+            from .triplets import refine_divisions
+            onset = rational(request.onset)
+            _, _, scale = position_context(doc, request.measure_id, request.draft_edit)
+            if onset is not None and 0 <= onset <= 1024:
+                denominator = (onset * scale).denominator
+                if denominator <= 16 and denominator & (denominator - 1) == 0 and denominator > 1:
+                    refine_divisions(doc, doc.get(request.measure_id, "measure"), scale, denominator)
             move_event(doc, event_id, request)
             doc.manual_changes[event_id] = sorted(set(doc.manual_changes.get(event_id, [])) | {"ownership", "voice", "staff", "onset"})
         return self.edit(identifier, revision, operation)
@@ -410,10 +418,18 @@ class ReviewService:
         def operation(doc, new_id):
             from .patcher import position_context
             from .triplets import refine_divisions
-            info, _, scale = position_context(doc, request.measure_id)
+            info, _, scale = position_context(doc, request.measure_id, request.draft_edit)
             from .importer import rational
             duration = rational(request.duration)
             factor = (duration * scale).denominator if duration is not None and 0 < duration <= 1024 else 1
+            onset = rational(request.onset)
+            if onset is not None and 0 <= onset <= 1024:
+                # Drag placement uses a bounded binary grid through 64th notes.
+                # Do not introduce arbitrary tuplets or change existing guards.
+                denominator = (onset * scale).denominator
+                if denominator <= 16 and denominator & (denominator - 1) == 0:
+                    from math import lcm
+                    factor = lcm(factor, denominator)
             if factor > 1:
                 refine_divisions(doc, doc.get(request.measure_id, "measure"), scale, factor)
             add_event(doc, new_id, request)

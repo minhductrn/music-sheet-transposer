@@ -7,8 +7,8 @@ export function beamSelected(review: Review, ids: string[], count: number) {
     if (selected.length !== count)
         throw Error('Selected notes changed. Select again.');
     const first = selected[0];
-    if (selected.some(e => e.kind !== 'note' || e.chord_id || e.grace || e.voice !== first.voice || e.staff !== first.staff || e.measure_id !== first.measure_id || !['eighth', '16th'].includes(e.notated_duration?.type ?? '')))
-        throw Error('Select consecutive single eighth or sixteenth notes in one measure, voice and staff.');
+    if (selected.some(e => e.kind !== 'note' || e.chord_id || e.grace || e.voice !== first.voice || e.staff !== first.staff || e.measure_id !== first.measure_id || !['eighth', '16th', '32nd', '64th'].includes(e.notated_duration?.type ?? '')))
+        throw Error('Select beamable notes in one measure, voice and staff.');
     const xml = new DOMParser().parseFromString(review.xml, 'application/xml');
     if (xml.querySelector('parsererror'))
         throw Error('MusicXML could not be parsed.');
@@ -50,21 +50,18 @@ export function beamSelected(review: Review, ids: string[], count: number) {
     const targets = selected.map(e => nodes.get(e.id));
     if (targets.some(n => !n))
         throw Error('Ambiguous XML note mapping; no beam changes applied.');
-    const parent = targets[0]!.parentElement!, ordered = [...parent.children].filter(n => n.localName === 'note' && text(n, 'voice', '1') === first.voice && Number(text(n, 'staff', '1')) === first.staff), indexes = targets.map(n => ordered.indexOf(n!));
-    indexes.sort((a, b) => a - b);
-    if (indexes.some((n, i) => n !== indexes[0] + i))
-        throw Error('Select consecutive notes, without skipping another event.');
-    const sorted = targets.map(n => n!).sort((a, b) => ordered.indexOf(a) - ordered.indexOf(b));
-    if (sorted.some(n => children(n, 'time-modification').length || children(n, 'notations').some(x => children(x, 'tuplet').length)))
-        throw Error('Existing tuplets must not be overwritten.');
-    sorted.forEach((n, i) => { for (const old of children(n, 'beam'))
-        old.remove(); const levels = text(n, 'type') === '16th' ? 2 : 1; for (let level = 1; level <= levels; level++) {
-        const beam = xml.createElementNS(ns, 'beam');
-        beam.setAttribute('number', String(level));
-        beam.textContent = i === 0 ? 'begin' : i === sorted.length - 1 ? 'end' : 'continue';
-        const before = [...n.children].find(c => ['notations', 'lyric', 'play', 'listen'].includes(c.localName));
-        n.insertBefore(beam, before ?? null);
-    } });
+    // Engraving is a user-directed edit. XML append/backup order is not rhythmic order.
+    const sorted=selected.slice().sort((a,b)=>rational(a.onset)-rational(b.onset)||a.id.localeCompare(b.id)).map(e=>nodes.get(e.id)!);
+    const levels=sorted.map(n=>({'eighth':1,'16th':2,'32nd':3,'64th':4}[text(n,'type')]??1));
+    for(const n of sorted)for(const old of children(n,'beam'))old.remove();
+    sorted.forEach((n,i)=>{
+        for(let level=1;level<=levels[i];level++){
+            const beam=xml.createElementNS(ns,'beam');beam.setAttribute('number',String(level));
+            const previous=i>0&&levels[i-1]>=level,next=i+1<sorted.length&&levels[i+1]>=level;
+            beam.textContent=previous?(next?'continue':'end'):(next?'begin':i+1<sorted.length?'forward hook':'backward hook');
+            const before=[...n.children].find(c=>['notations','lyric','play','listen'].includes(c.localName));n.insertBefore(beam,before??null);
+        }
+    });
     return new XMLSerializer().serializeToString(xml);
 }
 

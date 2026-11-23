@@ -114,3 +114,8 @@ Published release documents and acceptance/verification receipts under `docs/rel
 Direct Text objects occupy existing header whitespace without adding rows or moving staves. Click Text then the header, type and press Enter. Drag within the header. Select an object to edit/delete. Generated Concert-key and instrument labels use the same interaction. Stage 1/2 and Compare/Edit Only share the tools.
 
 The Product Owner accepted this extension on 2026-11-01. Current design, architecture, operations, user guide and bounded verification are under docs/release-1.0.3. Historical baselines remain unchanged.
+
+
+## Accepted production update — 1.0.7 (2026-11-22)
+
+Release 1.0.7 is the accepted local production update. It includes user-directed nonblocking draft correction and saving (PC-09), drag/drop and sequential note insertion, independent voice alignment, selected-note beaming, and the accepted lower lyric-row layout. Original verse identities remain intact; users delete unwanted imported extra verses explicitly. See docs/release-1.0.7 for acceptance, package verification, operations and limits. Earlier baseline descriptions remain historical. No cloud deployment is included.

@@ -1,3 +1,9 @@
+import {spaceLyricRows} from './lyricSpacing';
+import { prepareRhythmicView } from './rhythmicView';
+import { createColumnGuide, snapStaffPosition } from './noteDrag';
+import { prepareLyricLayout } from './lyricLayout';
+import { expandEditingMeasures } from './editingLayout';
+import type { NoteDropResolver, NoteDropPosition } from './noteDrag';
 import {renderScoreHeader,installHeaderDrag,type HeaderPosition} from './scoreHeader';
 import { renderPedalIdentities } from './pedalRendering';
 import { renderXML } from './renderXML';
@@ -11,6 +17,9 @@ export type Curve = {
     direction: 'up' | 'down';
 };
 type Props = {
+    onNoteMoveStart?:()=>void;
+    onNoteMove?:(id:string,position:NoteDropPosition)=>void;
+    onDropResolver?:(resolve:NoteDropResolver|null)=>void;
     headerEditing?:boolean;
     onHeader?:(box:DOMRect,position:HeaderPosition)=>void;
     onTextMove?:(id:string,position:HeaderPosition)=>void;
@@ -45,9 +54,9 @@ type Props = {
     onReady?: (count: number) => void;
 };
 // A head is interactive only when renderer semantics resolve exactly one XML event.
-export function RenderedScore({ headerEditing=false,onTextMove,onHeader,onMeasurePick,measureSelection=[],printCompact=false, review, readOnly, fitVersion=0, zoom, selected, selection=[], boxSelect=false, onSelection, onHarmony, onHarmonyCandidates, onStaffContext, selectedText, selectedMark, onMark, onHead, onLyric, onText, onGap, onReady, onAmbiguous, onCurve, onAnchor }: Props) {
-    const host = useRef<HTMLDivElement>(null), live = useRef({ onTextMove,onHeader,onMeasurePick,boxSelect, onSelection, onHarmony, onHarmonyCandidates, onStaffContext, selected, onMark, onHead, onLyric, onText, onGap, onReady, onAmbiguous, onCurve, onAnchor });
-    live.current = { onTextMove,onHeader,onMeasurePick,boxSelect, onSelection, onHarmony, onHarmonyCandidates, onStaffContext, selected, onMark, onHead, onLyric, onText, onGap, onReady, onAmbiguous, onCurve, onAnchor };
+export function RenderedScore({ onNoteMoveStart,onNoteMove,onDropResolver,headerEditing=false,onTextMove,onHeader,onMeasurePick,measureSelection=[],printCompact=false, review, readOnly, fitVersion=0, zoom, selected, selection=[], boxSelect=false, onSelection, onHarmony, onHarmonyCandidates, onStaffContext, selectedText, selectedMark, onMark, onHead, onLyric, onText, onGap, onReady, onAmbiguous, onCurve, onAnchor }: Props) {
+    const host = useRef<HTMLDivElement>(null), live = useRef({ onNoteMoveStart,onNoteMove,onDropResolver,onTextMove,onHeader,onMeasurePick,boxSelect, onSelection, onHarmony, onHarmonyCandidates, onStaffContext, selected, onMark, onHead, onLyric, onText, onGap, onReady, onAmbiguous, onCurve, onAnchor });
+    live.current = { onNoteMoveStart,onNoteMove,onDropResolver,onTextMove,onHeader,onMeasurePick,boxSelect, onSelection, onHarmony, onHarmonyCandidates, onStaffContext, selected, onMark, onHead, onLyric, onText, onGap, onReady, onAmbiguous, onCurve, onAnchor };
     const fitted=useRef(0);
     const scrollPosition=useRef({top:0,left:0});
     const [error, setError] = useState(''), [width, setWidth] = useState(0);
@@ -56,6 +65,7 @@ export function RenderedScore({ headerEditing=false,onTextMove,onHeader,onMeasur
     useEffect(() => {
         let disposed = false;
         const element = host.current;
+        const interactionCleanups:(()=>void)[]=[];
         if (!element)
             return;
         const parent=element.parentElement;if(parent){const css=getComputedStyle(parent);element.style.width=Math.max(1,parent.clientWidth-parseFloat(css.paddingLeft)-parseFloat(css.paddingRight))+'px';}
@@ -66,19 +76,22 @@ export function RenderedScore({ headerEditing=false,onTextMove,onHeader,onMeasur
         (async () => {
             try {
                 const sectionLayers:(()=>void)[]=[];
-                await osmd.load(renderXML(review.xml));
+                const dropResolvers:NoteDropResolver[]=[];
+                const rhythmicView=prepareRhythmicView(renderXML(review.xml));
+                const lyricLayout=prepareLyricLayout(rhythmicView.xml,rhythmicView.originalVoice);
+                await osmd.load(lyricLayout.xml);
                 if (disposed)
                     return;
                 // load() clears the OSMD zoom; apply the requested scale afterwards,
                 // before both native notation and canonical curve geometry are rendered.
+                expandEditingMeasures(osmd);
+                spaceLyricRows(osmd);
                 osmd.Zoom = zoom;
                 if(readOnly)osmd.render();else renderPedalIdentities(osmd);
                 const pageSVG=element.querySelector<SVGSVGElement>('svg');
                 if(pageSVG)renderScoreHeader(pageSVG,review,!readOnly&&headerEditing,(box,position)=>live.current.onHeader?.(box,position));
 
-                // Separate lyric rows by voice in the derived view; never merge or rewrite XML syllables.
-            const lyricVoices = [...new Set(events(review).filter(e => e.lyric_ids.length).map(e => e.voice))].sort();
-            const verseRows = Math.max(1, new Set(review.score.lyrics.map(l => l.number)).size);
+                // Lyric rows are allocated before engraving so system spacing includes every voice.
             for (const row of osmd.GraphicSheet.MeasureList) for (const measure of row) if (measure) for (const entry of measure.staffEntries) for (const lyric of entry.LyricsEntries) {
                 const node = lyric.GraphicalLabel.SVGNode as SVGGraphicsElement | null;
                 // PDF-only metadata: keep the existing engraving and locate the lyric's own voice head.
@@ -95,14 +108,7 @@ export function RenderedScore({ headerEditing=false,onTextMove,onHeader,onMeasur
                         node.setAttribute('data-pdf-note-center-x', String(center.x));
                     }
                 }
-                const voice = String(lyric.LyricsEntry.Parent.ParentVoice.VoiceId);
-                const index = lyricVoices.indexOf(voice);
-                if (node && index > 0) {
-                    const matrix = node.getScreenCTM();
-                    const scale = matrix ? Math.hypot(matrix.c, matrix.d) : 1;
-                    const offset = index * verseRows * (node.getBoundingClientRect().height + 5) / scale;
-                    node.setAttribute('transform', (node.getAttribute('transform') ?? '') + ` translate(0,${offset})`);
-                }
+
             }
             let count = 0;
                 const all = events(review);
@@ -124,7 +130,7 @@ export function RenderedScore({ headerEditing=false,onTextMove,onHeader,onMeasur
                                         continue;
                                     const part = osmd.Sheet.Instruments.indexOf(staff.ParentInstrument), mi = osmd.Sheet.SourceMeasures.indexOf(note.SourceMeasure), staffNumber = staff.ParentInstrument.Staves.indexOf(staff) + 1, pitch = note.Pitch;
                                     const canonical = review.score.parts[part]?.measures.find(m => m.index === mi);
-                                    const matches = all.filter(e => canonical?.voices.some(v => v.events.includes(e)) && e.staff === staffNumber && e.voice === String(note.ParentVoiceEntry.ParentVoice.VoiceId) && Math.abs(rational(e.onset) - note.ParentVoiceEntry.Timestamp.RealValue * 4) < 1e-7 && (e.grace || Math.abs(rational(e.duration) - note.Length.RealValue * 4) < 1e-7) && e.grace === !!note.IsGraceNote && e.kind === (note.isRest() ? 'rest' : 'note') && (note.isRest() || e.pitch?.step === Pitch.getNoteEnumString(pitch.FundamentalNote) && e.pitch.octave === pitch.Octave + Pitch.OctaveXmlDifference && Number(e.pitch.alter) === pitch.AccidentalHalfTones));
+                                    const matches = all.filter(e => canonical?.voices.some(v => v.events.includes(e)) && e.staff === staffNumber && e.voice === rhythmicView.originalVoice(part,staffNumber,String(note.ParentVoiceEntry.ParentVoice.VoiceId)) && Math.abs(rational(e.onset) - note.ParentVoiceEntry.Timestamp.RealValue * 4) < 1e-7 && (e.grace || Math.abs(rational(e.duration) - note.Length.RealValue * 4) < 1e-7) && e.grace === !!note.IsGraceNote && e.kind === (note.isRest() ? 'rest' : 'note') && (note.isRest() || e.pitch?.step === Pitch.getNoteEnumString(pitch.FundamentalNote) && e.pitch.octave === pitch.Octave + Pitch.OctaveXmlDifference && Number(e.pitch.alter) === pitch.AccidentalHalfTones));
                                     const vf = graphical as VexFlowGraphicalNote;
                                     const heads = vf.getNoteheadSVGs?.() ?? [], head = heads[vf.vfnote?.[1] ?? vf.vfnoteIndex] ?? (note.isRest() ? vf.getSVGGElement?.() : null);
                                     if (!head || matches.length !== 1)
@@ -248,6 +254,25 @@ export function RenderedScore({ headerEditing=false,onTextMove,onHeader,onMeasur
                                 box: DOMRect;
                             }[];
                         } | null = null;
+                        let moving=false,moveTarget:NoteDropPosition|null=null;
+                        const columnGuide=createColumnGuide();
+                        const preview=document.createElement('div');preview.className='note-drop-preview';preview.style.pointerEvents='none';preview.setAttribute('role','status');
+                        const cancelMove=()=>{moving=false;moveTarget=null;down=null;preview.remove();columnGuide.remove();window.removeEventListener('keydown',cancelKey);};
+                        const cancelKey=(e:KeyboardEvent)=>{if(e.key==='Escape'){e.preventDefault();cancelMove();}};
+                        interactionCleanups.push(cancelMove);
+                        svg.addEventListener('pointercancel',cancelMove);
+                        svg.addEventListener('pointermove',e=>{
+                            if(!down||down.hits.length!==1||down.hits[0].event.kind!=='note'||!live.current.onNoteMove)return;
+                            if(!moving&&(Math.abs(e.clientX-down.x)<8||Math.abs(e.clientX-down.x)<Math.abs(e.clientY-down.y)))return;
+                            const event=down.hits[0].event;
+                            if(!moving){moving=true;live.current.onNoteMoveStart?.();document.body.append(preview,columnGuide.element);window.addEventListener('keydown',cancelKey);}
+                            e.preventDefault();moveTarget=null;
+                            for(const resolve of dropResolvers){const p=resolve(e.clientX,e.clientY,e.altKey);if(p&&p.measure_id===event.measure_id&&p.staff===event.staff){moveTarget=p;break;}}
+                            preview.style.left=Math.max(4,Math.min(window.innerWidth-260,e.clientX+12))+'px';preview.style.top=Math.max(4,e.clientY-60)+'px';preview.dataset.valid=String(!!moveTarget);
+                            columnGuide.update(moveTarget);
+                            const alignment=moveTarget?.aligned?'Aligned'+((moveTarget.anchorVoices??[]).some(v=>v!==event.voice)?' with Voice '+moveTarget.anchorVoices!.filter(v=>v!==event.voice).join(', '):'')+' · ':'';
+                            preview.textContent=moveTarget?alignment+'Move '+event.pitch?.step+event.pitch?.octave+' · beat '+(rational(moveTarget.onset)+1)+' · Voice '+event.voice+' · pitch unchanged':'Move within the same measure and staff';
+                        },true);
                         let boxStart:{x:number;y:number}|null=null;
                         let boxRect:SVGRectElement|null=null;
                         const clearBox=()=>{boxRect?.remove();boxRect=null;boxStart=null;};
@@ -272,9 +297,9 @@ export function RenderedScore({ headerEditing=false,onTextMove,onHeader,onMeasur
                         },true);
                         svg.addEventListener('pointercancel',clearBox);
                         svg.addEventListener('pointerdown', e => { if(e.button!==0)return; if((e.target as Element).closest('[data-testid^="real-curve-"], [data-text-id], [data-mark-id], [data-harmony-id]')){svg.dataset.noteGesture='true';return;} const hits = [...bindings].filter(([n]) => n.closest('svg') === svg).map(([node, value]) => ({ ...value, box: node.getBoundingClientRect() })).filter(v => e.clientX >= v.box.left - 3 && e.clientX <= v.box.right + 3 && e.clientY >= v.box.top - 3 && e.clientY <= v.box.bottom + 3); svg.dataset.noteGesture = hits.length ? 'true' : 'false'; if (!hits.length)
-                            return; e.stopPropagation(); e.preventDefault(); down = { x: e.clientX, y: e.clientY, hits }; svg.setPointerCapture(e.pointerId); }, true);
+                            return; e.stopPropagation(); e.preventDefault(); down = { x: e.clientX, y: e.clientY, hits:live.current.selected&&hits.some(h=>h.event.id===live.current.selected)?hits.filter(h=>h.event.id===live.current.selected):hits }; svg.setPointerCapture(e.pointerId); }, true);
                         svg.addEventListener('pointerup', e => { if (!down)
-                            return; e.stopPropagation(); const dy = (e.clientY - down.y) / (down.hits[0].spacing / 2); if (down.hits.length === 1)
+                            return; e.stopPropagation(); if(moving){const id=down.hits[0].event.id,target=moveTarget;cancelMove();if(target)live.current.onNoteMove?.(id,target);return;} const dy = (e.clientY - down.y) / (down.hits[0].spacing / 2); if (down.hits.length === 1)
                             live.current.onHead?.(down.hits[0].event.id, dy);
                         else
                             live.current.onAmbiguous?.(down.hits.map(h => h.event.id), dy, down.hits[0].box); down = null; }, true);
@@ -289,12 +314,13 @@ export function RenderedScore({ headerEditing=false,onTextMove,onHeader,onMeasur
                                         const partIndex=osmd.Sheet.Instruments.indexOf(staff.ParentInstrument);
                                         const staffNumber=staff.ParentInstrument.Staves.indexOf(staff)+1;
                                         const canonical=review.score.parts[partIndex]?.measures.find(m=>m.index===osmd.Sheet.SourceMeasures.indexOf(measure.parentSourceMeasure));
-                                        const ownerCandidates = all.filter(e => e.staff===staffNumber && canonical?.voices.some(v=>v.events.includes(e)) && bindings.size > 0 && e.voice === String(voice.ParentVoice.VoiceId) && review.score.parts.some(p => p.measures.some(m => m.index === osmd.Sheet.SourceMeasures.indexOf(measure.parentSourceMeasure) && m.voices.some(v => v.events.includes(e)))) && Math.abs(rational(e.onset) - voice.Timestamp.RealValue * 4) < 1e-7 && review.score.lyrics.some(l => l.event_id === e.id && l.number === source.VerseNumber && l.text === source.Text));
+                                        const originalVerse=lyricLayout.originalVerse(partIndex,staffNumber,String(voice.ParentVoice.VoiceId),source.VerseNumber);
+                                        const ownerCandidates = all.filter(e => e.staff===staffNumber && canonical?.voices.some(v=>v.events.includes(e)) && bindings.size > 0 && e.voice === rhythmicView.originalVoice(partIndex,staffNumber,String(voice.ParentVoice.VoiceId)) && review.score.parts.some(p => p.measures.some(m => m.index === osmd.Sheet.SourceMeasures.indexOf(measure.parentSourceMeasure) && m.voices.some(v => v.events.includes(e)))) && Math.abs(rational(e.onset) - voice.Timestamp.RealValue * 4) < 1e-7 && review.score.lyrics.some(l => l.event_id === e.id && l.number === originalVerse && l.text === source.Text));
                                         const node = lyric.GraphicalLabel.SVGNode as SVGGraphicsElement | null;
                                         if (node && ownerCandidates.length === 1) {
                                             node.style.cursor = 'text';
-                                            node.setAttribute('data-testid', 'real-lyric-' + ownerCandidates[0].id + '-' + source.VerseNumber);
-                                            node.onclick = e => { e.stopPropagation(); live.current.onLyric?.(ownerCandidates[0].id, source.VerseNumber, node.getBoundingClientRect()); };
+                                            node.setAttribute('data-testid', 'real-lyric-' + ownerCandidates[0].id + '-' + originalVerse);
+                                            node.onclick = e => { e.stopPropagation(); live.current.onLyric?.(ownerCandidates[0].id, originalVerse, node.getBoundingClientRect()); };
                                         }
                                     }
                     // Staff anchors use actual rendered timestamps and staff lines; XML onset remains explicit.
@@ -332,6 +358,29 @@ export function RenderedScore({ headerEditing=false,onTextMove,onHeader,onMeasur
                             const end = rational(canonical.expected_duration) || Math.max(...modelEvents.map(e => rational(e.onset) + rational(e.duration)));
                             const anchors = [...points, { beat: end, x: right - 6 }];
                             const positionAt = (beat: number) => { const before = [...anchors].reverse().find(p => p.beat <= beat) ?? anchors[0], after = anchors.find(p => p.beat >= beat) ?? anchors[anchors.length - 1]; return after.beat === before.beat ? before.x : before.x + (after.x - before.x) * (beat - before.beat) / (after.beat - before.beat); };
+                            dropResolvers.push((clientX,clientY,fine=false)=>{
+                                const matrix=svg.getScreenCTM();if(!matrix)return null;
+                                const pt=new DOMPoint(clientX,clientY).matrixTransform(matrix.inverse());
+                                if(pt.x<left||pt.x>right||pt.y<top-spacing*3||pt.y>top+spacing*7)return null;
+                                const clef=modelEvents.find(e=>e.staff===staffNumber)?.clef;
+                                const sign=clef?.fields?.find(f=>f.name==='sign')?.text??clef?.sign??'G',line=clef?.fields?.find(f=>f.name==='line')?.text??clef?.line??'2';
+                                const bottoms:Record<string,number>={'G2':30,'F4':18,'C3':24,'C4':22};
+                                const base=bottoms[sign+line];if(base===undefined)return null;
+                                const octave=Number(clef?.fields?.find(f=>f.name==='clef-octave-change')?.text??clef?.octave_change??0);
+                                const bottom=base+7*octave,diatonic=bottom-Math.round((pt.y-(top+spacing*4))/(spacing/2));
+                                const step='CDEFGAB'[((diatonic%7)+7)%7],pitchOctave=Math.floor(diatonic/7);if(pitchOctave<0||pitchOctave>9)return null;
+                                const beats=[...new Set([...points.map(p=>p.beat),...Array.from({length:Math.min(16384,Math.ceil(end*16))},(_,i)=>i/16)])];
+                                const tolerance=fine?0:8/Math.hypot(matrix.a,matrix.b);
+                                const nearest=snapStaffPosition(points,beats.map(beat=>({beat,x:positionAt(beat)})),pt.x,tolerance);
+                                const fifths=Number(canonical.key_signature[0]?.fifths??0),alter=(fifths>=0?'FCGDAEB':'BEADGCF').slice(0,Math.abs(fifths)).includes(step)?String(fifths>=0?1:-1):'0';
+                                const existing=modelEvents.find(e=>e.onset!==null&&rational(e.onset)===nearest.beat);
+                                const snapped=new DOMPoint(nearest.x,top+spacing*4-(diatonic-bottom)*spacing/2).matrixTransform(matrix);
+                                const guideTop=new DOMPoint(nearest.x,top-spacing*2).matrixTransform(matrix).y;
+                                const guideBottom=new DOMPoint(nearest.x,Math.max(top+spacing*6,top+spacing*4-(diatonic-bottom)*spacing/2+spacing)).matrixTransform(matrix).y;
+                                const aligned=!fine&&points.includes(nearest);
+                                const anchorVoices=[...new Set(modelEvents.filter(e=>e.staff===staffNumber&&e.onset!==null&&rational(e.onset)===nearest.beat).map(e=>e.voice))];
+                                return {measure_id:canonical.id,measure_number:canonical.number,onset:existing?.onset??String(nearest.beat),staff:staffNumber,pitch:{step,alter,octave:pitchOctave},x:snapped.x,y:snapped.y,aligned,guideTop,guideBottom,anchorVoices} satisfies NoteDropPosition;
+                            });
                             const positionTokens = new Map(modelEvents.filter(e => e.onset !== null).map(e => [rational(e.onset), e.onset!]));
                             for (const gap of canonical.insertion_gaps ?? [])
                                 positionTokens.set(rational(gap.onset), gap.onset);
@@ -387,6 +436,7 @@ export function RenderedScore({ headerEditing=false,onTextMove,onHeader,onMeasur
                                 live.current.onAnchor?.(canonical.id, positionTokens.get(nearest.beat) ?? String(nearest.beat), staffNumber, { step, alter, octave: Math.floor(diatonic / 7) }, new DOMRect(e.clientX, e.clientY, 0, 0));
                             });
                         }
+                    live.current.onDropResolver?.((x,y,fine)=>{for(const resolve of dropResolvers){const p=resolve(x,y,fine);if(p)return p;}return null;});
                     const visitedPedals=new Set<object>();
                     for(const row of osmd.GraphicSheet.MeasureList)for(const measure of row){
                         if(!measure?.ParentStaffLine)continue;
@@ -501,7 +551,7 @@ export function RenderedScore({ headerEditing=false,onTextMove,onHeader,onMeasur
                     setError(e instanceof Error ? e.message : 'Cannot render this MusicXML.');
             }
         })();
-        return () => { disposed = true; const viewport=element.parentElement;if(viewport)scrollPosition.current={top:viewport.scrollTop,left:viewport.scrollLeft};element.replaceChildren(); };
+        return () => { disposed = true;interactionCleanups.forEach(cleanup=>cleanup()); const viewport=element.parentElement;if(viewport)scrollPosition.current={top:viewport.scrollTop,left:viewport.scrollLeft};element.replaceChildren(); };
     }, [review, readOnly, zoom, width,fitVersion,printCompact,headerEditing,!!onMeasurePick,measureSelection.join(",")]);
     useEffect(() => { host.current?.querySelectorAll('[data-event-id]').forEach(n => { const active = n.getAttribute('data-event-id') === selected || selection.includes(n.getAttribute('data-event-id')??''); n.classList.toggle('real-selected', active); n.setAttribute('aria-pressed', String(active)); }); }, [selected, selection, review, zoom]);
     useEffect(()=>{host.current?.querySelectorAll('[data-text-id]').forEach(n=>{n.classList.toggle('real-object-selected',n.getAttribute('data-text-id')===selectedText);});},[selectedText,review,zoom]);

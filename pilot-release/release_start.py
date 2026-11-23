@@ -1,4 +1,4 @@
-"""Music Sheet Transposer 1.0 local production launcher."""
+"""Music Sheet Transposer local production launcher."""
 from pathlib import Path
 import argparse
 import hashlib
@@ -22,7 +22,7 @@ def verify():
     return manifest
 
 def main():
-    parser = argparse.ArgumentParser(description="Music Sheet Transposer 1.0 local production")
+    parser = argparse.ArgumentParser(description="Music Sheet Transposer local production")
     parser.add_argument("--port", type=int, default=5250)
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
@@ -61,7 +61,7 @@ def main():
         return await call_next(request)
 
     app.mount("/", StaticFiles(directory=ROOT / "web", html=True), name="pilot")
-    print(f"Open http://localhost:{args.port} — Ctrl+C to stop. Save MusicXML before closing.", flush=True)
+    print(f"Music Sheet Transposer {manifest['version']} — Open http://localhost:{args.port} — Ctrl+C to stop. Save MusicXML before closing.", flush=True)
     uvicorn.run(app, host="127.0.0.1", port=args.port, workers=1, access_log=False, loop="asyncio", http="h11")
 
 if __name__ == "__main__":

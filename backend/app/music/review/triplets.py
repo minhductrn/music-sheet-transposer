@@ -59,7 +59,7 @@ def triplet(doc, identifier, request):
     if request.pattern == 'quarter-eighth':
         return mixed_triplet(doc, identifier, request)
     measure = doc.get(request.measure_id, 'measure')
-    info, cursor, scale = position_context(doc, request.measure_id)
+    info, cursor, scale = position_context(doc, request.measure_id, request.draft_edit)
     base = Fraction(request.base_duration)
     count = request.actual_notes
     effective = base * Fraction(request.normal_notes, count)
@@ -82,7 +82,7 @@ def triplet(doc, identifier, request):
         old_span = sum((rational(e.duration) for e in events), Fraction(0))
         if onset is None or any(rational(b.onset) != rational(a.onset) + rational(a.duration) for a, b in zip(events, events[1:])):
             raise ReviewError('The selected notes do not have a contiguous known timeline.')
-        if count * effective > old_span:
+        if not request.draft_edit and count * effective > old_span:
             raise ReviewError('The triplet exceeds the selected interval. Delete and choose an explicit unoccupied location instead.')
     else:
         onset = rational(request.onset)
@@ -96,11 +96,11 @@ def triplet(doc, identifier, request):
                     start, duration = rational(e.onset), rational(e.duration)
                     if start is None or duration is None:
                         raise ReviewError('Triplet insertion requires known event timing.')
-                    if onset < start + duration and start < onset + count * effective:
+                    if not request.draft_edit and onset < start + duration and start < onset + count * effective:
                         raise ReviewError('The triplet overlaps existing content. Delete the incorrect notes with timing preserved or choose an empty location.')
         gaps = [g for g in info.insertion_gaps if g['voice'] == request.voice and g['staff'] == request.staff
                 and rational(g['onset']) <= onset < rational(g['onset']) + rational(g['duration'])]
-        if gaps and all(onset + count * effective > rational(g['onset']) + rational(g['duration']) for g in gaps):
+        if not request.draft_edit and gaps and all(onset + count * effective > rational(g['onset']) + rational(g['duration']) for g in gaps):
             raise ReviewError('The triplet exceeds the selected preserved gap.')
     # Refine integer divisions only when required; scale all timing units in this
     # part together, including later inherited divisions. Musical times do not change.
@@ -140,8 +140,9 @@ def triplet(doc, identifier, request):
             notations = put(doc, note, 'notations')
             ET.SubElement(notations, doc.namespace + 'tuplet', {'type': 'start' if index == 0 else 'stop', 'number': '1', **({'bracket': 'yes', 'show-number': 'actual' if count == 3 and request.normal_notes == 2 else 'both'} if index == 0 else {})})
     if old_span is not None and old_span != effective * count:
-        node = ET.Element(doc.namespace + 'forward')
-        ET.SubElement(node, doc.namespace + 'duration').text = xml_units((old_span - effective * count) * scale)
+        delta = old_span - effective * count
+        node = ET.Element(doc.namespace + ('forward' if delta > 0 else 'backup'))
+        ET.SubElement(node, doc.namespace + 'duration').text = xml_units(abs(delta) * scale)
         measure.insert(list(measure).index(notes[-1]) + 1, node)
     doc.manual_changes[request.measure_id] = sorted(set(doc.manual_changes.get(request.measure_id, [])) | {'events', 'triplet'})
     for key, node in doc.refs.items():
@@ -158,7 +159,7 @@ def mixed_triplet(doc, identifier, request):
     """
     from .patcher import pitch_patch
     measure = doc.get(request.measure_id, 'measure')
-    info, cursor, scale = position_context(doc, request.measure_id)
+    info, cursor, scale = position_context(doc, request.measure_id, request.draft_edit)
     selected = [doc.get(key, 'note') for key in request.event_ids]
     old_span = None
     if selected:
@@ -214,11 +215,11 @@ def mixed_triplet(doc, identifier, request):
                     start, duration = rational(e.onset), rational(e.duration)
                     if start is None or duration is None:
                         raise ReviewError('Insertion requires known musical timing.')
-                    if onset < start + duration and start < onset + 1:
+                    if not request.draft_edit and onset < start + duration and start < onset + 1:
                         raise ReviewError('The triplet overlaps existing content. Delete with timing preserved or choose an unoccupied location.')
         gaps = [g for g in info.insertion_gaps if g['voice'] == request.voice and g['staff'] == request.staff
                 and rational(g['onset']) <= onset < rational(g['onset']) + rational(g['duration'])]
-        if gaps and all(onset + 1 > rational(g['onset']) + rational(g['duration']) for g in gaps):
+        if not request.draft_edit and gaps and all(onset + 1 > rational(g['onset']) + rational(g['duration']) for g in gaps):
             raise ReviewError('The triplet exceeds the preserved gap.')
     for members in groups:
         pitches = [(doc.text(doc.child(n, 'pitch'), 'step'), rational(doc.text(doc.child(n, 'pitch'), 'alter', '0')),

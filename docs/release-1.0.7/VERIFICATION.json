@@ -1,0 +1,12 @@
+{
+  "version": "1.0.7",
+  "package_verification": "PENDING",
+  "source_checks": [
+    "Backend full suite: 1135 passed, 3 skipped; additional focused correction tests passed",
+    "Frontend unit suite: 71 passed",
+    "Accepted correction workflows: browser coverage for drag/drop, voice alignment, beam selection, draft Save, sequential note insertion",
+    "Final lyric tests: 6 passed; canonical bytes and original verse IDs retained",
+    "Lint and build passed; existing bundle-size warning"
+  ],
+  "limits": "Package-specific verification pending. Source checks were run across the implementation; no claim of a complete full-browser suite. No independent external reviewer sign-off is recorded."
+}
