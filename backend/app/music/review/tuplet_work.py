@@ -13,6 +13,9 @@ VALUES = {'whole': Fraction(4), 'half': Fraction(2), 'quarter': Fraction(1),
 
 
 def edit_tuplet(doc, identifier, request):
+    if request.draft_edit or request.action=='mixed':
+        from .draft_tuplets import edit_draft_tuplet
+        return edit_draft_tuplet(doc,identifier,request)
     if len(set(request.event_ids)) != len(request.event_ids):
         raise ReviewError('Select each rhythmic event once.')
     nodes = [doc.get(key, 'note') for key in request.event_ids]

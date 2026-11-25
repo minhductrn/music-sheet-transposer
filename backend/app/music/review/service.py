@@ -5,6 +5,7 @@ from dataclasses import asdict, replace
 from copy import deepcopy
 from fractions import Fraction
 import secrets
+import re
 from xml.etree import ElementTree as ET
 
 from app.core.config import Settings
@@ -215,7 +216,12 @@ class ReviewService:
         with self.store.lock:
             session = self._session(identifier, revision)
             candidate = session.document.clone()
-            sequence = session.sequence + 1
+            # Restored/imported identities may exceed the saved counter. Never
+            # overwrite a retained reference, including one reachable by Undo.
+            documents=[session.document,*session.undo,*session.redo]
+            highest=max((int(match[1]) for document in documents for key in document.refs
+                         if (match:=re.match(r"^new-(\d+)(?:$|-)",key))),default=0)
+            sequence = max(session.sequence,highest) + 1
             if operation(candidate, f"new-{sequence}") is False:
                 return self.payload(session)
             if len(candidate.xml()) > self.config.recognition_max_output_bytes or sum(1 for _ in candidate.root.iter()) > self.config.review_max_xml_nodes:

@@ -40,6 +40,13 @@ async function generatePDF(review:Review,settings:PDFSettings,signal:AbortSignal
    template.querySelectorAll('text,tspan').forEach(t=>{t.setAttribute('font-family','DejaVuSerif');(t as SVGElement).style.fontFamily='DejaVuSerif';});
    const measure=document.createElement('div');container.append(measure);measure.append(template);
    try{
+    // svg2pdf does not reliably honor alpha in eight-digit hex colors.
+    // Remove transparent spacer ink explicitly, including rest dots.
+    const clearPaint=(value:string)=>value==='none'||value==='transparent'||/^#[0-9a-f]{6}00$/i.test(value)||/^rgba\([^)]*,\s*0\s*\)$/.test(value);
+    [...template.querySelectorAll<SVGGraphicsElement>('path,text,line,rect,ellipse,circle,polygon,polyline,use')].filter(node=>{const style=getComputedStyle(node);return clearPaint(style.fill)&&clearPaint(style.stroke);}).forEach(node=>node.remove());
+    // PDF converters can ignore inherited SVG visibility. Remove hidden ink
+    // explicitly; invisible engraving spacers must never become printed rests.
+    [...template.querySelectorAll<SVGGraphicsElement>('g,path,text,line,rect,ellipse,circle,polygon,polyline,use')].filter(node=>!active(node,template)).forEach(node=>node.remove());
     // Center only lyric ink on its own notehead after the export font is applied.
     // Do not reflow systems, resize measures or alter the canonical MusicXML.
     for (const lyric of template.querySelectorAll<SVGGraphicsElement>('[data-pdf-note-center-x]')) {

@@ -151,6 +151,7 @@ class EventAdd(Request):
     voice: str | None = Field(default=None, min_length=1, max_length=32, pattern=r"^\S+$")
     staff: StrictInt | None = Field(default=None, ge=1, le=128)
     display_size: Literal["normal", "small", "cue"] = "normal"
+    grace_slur: StrictBool = False
     grace: StrictBool = False
     grace_slash: StrictBool | None = None
 
@@ -190,7 +191,7 @@ class TripletEdit(Request):
 class TupletWork(Request):
     draft_edit: StrictBool = False
     event_ids: list[str] = Field(min_length=1, max_length=128)
-    action: Literal['apply', 'split', 'remove'] = 'apply'
+    action: Literal['apply', 'split', 'mixed', 'remove'] = 'apply'
     actual_notes: StrictInt = Field(default=3, ge=2, le=16)
     normal_notes: StrictInt = Field(default=2, ge=1, le=16)
     bracket: Literal['yes', 'no'] = 'yes'
@@ -301,6 +302,7 @@ class EventMove(Request):
 
 
 class SlurEdit(Request):
+    draft_edit: StrictBool = False
     source_event_id: str = Field(min_length=1, max_length=128)
     target_event_id: str = Field(min_length=1, max_length=128)
     direction: Literal["up", "down"] = "up"

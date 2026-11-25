@@ -1,0 +1,7 @@
+import {test,expect} from '@playwright/test';
+import {prepareRhythmicView} from '../../src/real/rhythmicView';
+test('Explicit beam retains one rendering voice across overlapping correction notes with engraving-only spans',async({page})=>{
+ const xml='<score-partwise><part id="P1"><measure number="1"><attributes><divisions>16</divisions></attributes><note><pitch><step>C</step><octave>5</octave></pitch><duration>32</duration><voice>1</voice><type>half</type></note><backup><duration>25</duration></backup><note><pitch><step>B</step><octave>4</octave></pitch><duration>8</duration><voice>1</voice><type>eighth</type><beam number="1">begin</beam></note><backup><duration>3</duration></backup><note><pitch><step>F</step><octave>4</octave></pitch><duration>8</duration><voice>1</voice><type>eighth</type><beam number="1">end</beam></note></measure></part></score-partwise>';
+ const result=await page.evaluate(({source,xml})=>{const prepare=(0,eval)('('+source+')');const out=prepare(xml);const doc=new DOMParser().parseFromString(out.xml,'application/xml');return [...doc.querySelectorAll('note')].filter(n=>n.querySelector('pitch')).map(n=>({voice:n.querySelector('voice')?.textContent,duration:n.querySelector('duration')?.textContent,beam:n.querySelector('beam')?.textContent}));},{source:prepareRhythmicView.toString(),xml});
+ expect(result[1].voice).toBe(result[2].voice);expect(result[0].voice).not.toBe(result[1].voice);expect(result.map(n=>n.duration)).toEqual(['32','5','8']);expect(result.map(n=>n.beam)).toEqual([undefined,'begin','end']);
+});

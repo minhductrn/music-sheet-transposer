@@ -1,0 +1,17 @@
+{
+  "version": "1.0.8",
+  "date": "2026-11-25",
+  "status": "ACCEPTED",
+  "authority": "Product Owner",
+  "evidence": "Product Owner confirmed the current Export PDF tool met requirements and requested production packaging, GitHub sync and README update. Previously accepted editing behavior is retained and regression tested.",
+  "principles": [
+    "PC-02",
+    "PC-03",
+    "PC-05",
+    "PC-06",
+    "PC-07",
+    "PC-08",
+    "PC-09"
+  ],
+  "independent_technical_review": "No separate external reviewer sign-off recorded."
+}

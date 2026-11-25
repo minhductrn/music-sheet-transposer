@@ -119,3 +119,8 @@ The Product Owner accepted this extension on 2026-11-01. Current design, archite
 ## Accepted production update — 1.0.7 (2026-11-22)
 
 Release 1.0.7 is the accepted local production update. It includes user-directed nonblocking draft correction and saving (PC-09), drag/drop and sequential note insertion, independent voice alignment, selected-note beaming, and the accepted lower lyric-row layout. Original verse identities remain intact; users delete unwanted imported extra verses explicitly. See docs/release-1.0.7 for acceptance, package verification, operations and limits. Earlier baseline descriptions remain historical. No cloud deployment is included.
+
+
+## 1.0.8 maintenance
+
+The accepted PDF export tool removes invisible spacer rests and dots from all score stages. Voice-column, beam/lyric engraving, shared inspector, explicit stem/lyric-connection and non-blocking draft correction fixes are described in docs/release-1.0.8/RELEASE_NOTES.md. Saved musical content remains authoritative.

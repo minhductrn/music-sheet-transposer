@@ -22,7 +22,7 @@ def pairs(doc):
         # A number is a reusable lane, not a globally unique relationship ID.
         pending = None
         ambiguous = False
-        ends.sort(key=lambda x: (x[2], Fraction(x[0].onset or '0'), 0 if x[1].get('type') == 'stop' else 1))
+        ends.sort(key=lambda x: (x[2], Fraction(x[0].onset or '0'), 0 if x[0].grace and x[1].get('type')=='start' else 1 if x[1].get('type')=='stop' else 2))
         for event, node, mi in ends:
             kind = node.get('type')
             if kind == 'start':
@@ -33,7 +33,7 @@ def pairs(doc):
             elif kind == 'stop':
                 if pending is not None and not ambiguous:
                     source, start, si = pending
-                    if source.onset is not None and event.onset is not None and (si, Fraction(source.onset)) < (mi, Fraction(event.onset)) and (source.voice, source.staff) == (event.voice, event.staff):
+                    if source.onset is not None and event.onset is not None and ((si, Fraction(source.onset)) < (mi, Fraction(event.onset)) or (source.grace and not event.grace and (si, Fraction(source.onset)) == (mi, Fraction(event.onset)))):
                         result.append({'source_event_id':source.id,'target_event_id':event.id,'part_id':part,'number':number,'direction':'down' if start.get('placement')=='below' or (start.get('placement') is None and start.get('orientation')=='under') else 'up'})
                 pending = None; ambiguous = False
     return result
@@ -44,9 +44,9 @@ def apply(doc, request):
     score, _ = import_score(doc)
     owned = {e.id: (p.id, m.index, e) for p in score.parts for m in p.measures for v in m.voices for e in v.events}
     pa, ma, ea = owned[request.source_event_id]; pb, mb, eb = owned[request.target_event_id]
-    if ea.kind != "note" or eb.kind != "note" or pa != pb or (ea.voice, ea.staff) != (eb.voice, eb.staff):
+    if ea.kind != "note" or eb.kind != "note" or pa != pb or (not request.draft_edit and (ea.voice, ea.staff) != (eb.voice, eb.staff)):
         raise ReviewError("Choose two pitched notes in the same part, voice and staff.")
-    if ea.onset is None or eb.onset is None or (ma, Fraction(ea.onset)) >= (mb, Fraction(eb.onset)):
+    if not request.draft_edit and (ea.onset is None or eb.onset is None or (ma, Fraction(ea.onset)) >= (mb, Fraction(eb.onset))):
         raise ReviewError("Choose a later destination note.")
     existing = next((p for p in pairs(doc) if p['source_event_id'] == ea.id and p['target_event_id'] == eb.id), None)
     if existing:
@@ -64,7 +64,21 @@ def apply(doc, request):
         return
     source_numbers = {s.get('number','1') for n in doc.children(a,'notations') for s in doc.children(n,'slur') if s.get('type') == 'start'}
     target_numbers = {s.get('number','1') for n in doc.children(b,'notations') for s in doc.children(n,'slur') if s.get('type') == 'stop'}
-    if source_numbers & target_numbers:
+    shared=source_numbers & target_numbers
+    if shared and request.draft_edit:
+        # Explicit endpoints are enough to edit their matching markings, even
+        # when scanner timing/voice ownership prevents conventional pairing.
+        for note,kind in ((a,'start'),(b,'stop')):
+            for notation in doc.children(note,'notations'):
+                for mark in list(doc.children(notation,'slur')):
+                    if mark.get('number','1') in shared and mark.get('type')==kind:
+                        if request.remove:notation.remove(mark)
+                        elif 'direction' in request.model_fields_set:
+                            mark.set('placement','above' if request.direction=='up' else 'below')
+                            mark.set('orientation','over' if request.direction=='up' else 'under')
+        doc.changed=True
+        return
+    if shared:
         raise ReviewError('These endpoints contain an ambiguous existing slur; no duplicate was added.',409)
     if request.remove:
         raise ReviewError("This slur is missing or ambiguous; no data changed.", 409)

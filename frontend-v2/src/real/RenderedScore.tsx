@@ -1,3 +1,5 @@
+import {resolveNoteHits} from './noteHit';
+import {restoreExplicitBeams} from './beamLayout';
 import {spaceLyricRows} from './lyricSpacing';
 import { prepareRhythmicView } from './rhythmicView';
 import { createColumnGuide, snapStaffPosition } from './noteDrag';
@@ -55,8 +57,8 @@ type Props = {
 };
 // A head is interactive only when renderer semantics resolve exactly one XML event.
 export function RenderedScore({ onNoteMoveStart,onNoteMove,onDropResolver,headerEditing=false,onTextMove,onHeader,onMeasurePick,measureSelection=[],printCompact=false, review, readOnly, fitVersion=0, zoom, selected, selection=[], boxSelect=false, onSelection, onHarmony, onHarmonyCandidates, onStaffContext, selectedText, selectedMark, onMark, onHead, onLyric, onText, onGap, onReady, onAmbiguous, onCurve, onAnchor }: Props) {
-    const host = useRef<HTMLDivElement>(null), live = useRef({ onNoteMoveStart,onNoteMove,onDropResolver,onTextMove,onHeader,onMeasurePick,boxSelect, onSelection, onHarmony, onHarmonyCandidates, onStaffContext, selected, onMark, onHead, onLyric, onText, onGap, onReady, onAmbiguous, onCurve, onAnchor });
-    live.current = { onNoteMoveStart,onNoteMove,onDropResolver,onTextMove,onHeader,onMeasurePick,boxSelect, onSelection, onHarmony, onHarmonyCandidates, onStaffContext, selected, onMark, onHead, onLyric, onText, onGap, onReady, onAmbiguous, onCurve, onAnchor };
+    const host = useRef<HTMLDivElement>(null), live = useRef({ onNoteMoveStart,onNoteMove,onDropResolver,onTextMove,onHeader,onMeasurePick,boxSelect, onSelection, onHarmony, onHarmonyCandidates, onStaffContext, selected, selection, onMark, onHead, onLyric, onText, onGap, onReady, onAmbiguous, onCurve, onAnchor });
+    live.current = { onNoteMoveStart,onNoteMove,onDropResolver,onTextMove,onHeader,onMeasurePick,boxSelect, onSelection, onHarmony, onHarmonyCandidates, onStaffContext, selected, selection, onMark, onHead, onLyric, onText, onGap, onReady, onAmbiguous, onCurve, onAnchor };
     const fitted=useRef(0);
     const scrollPosition=useRef({top:0,left:0});
     const [error, setError] = useState(''), [width, setWidth] = useState(0);
@@ -84,6 +86,7 @@ export function RenderedScore({ onNoteMoveStart,onNoteMove,onDropResolver,header
                     return;
                 // load() clears the OSMD zoom; apply the requested scale afterwards,
                 // before both native notation and canonical curve geometry are rendered.
+                if(restoreExplicitBeams(osmd,lyricLayout.xml))osmd.updateGraphic();
                 expandEditingMeasures(osmd);
                 spaceLyricRows(osmd);
                 osmd.Zoom = zoom;
@@ -126,11 +129,14 @@ export function RenderedScore({ onNoteMoveStart,onNoteMove,onDropResolver,header
                             for (const voice of entry.graphicalVoiceEntries)
                                 for (const graphical of voice.notes) {
                                     const note = graphical.sourceNote, staff = note?.ParentStaff;
+                                    // Keep spacing ticks, but remove the entire invisible rest
+                                    // glyph (including dots) before display or PDF conversion.
+                                    if(note?.isRest()&&!note.PrintObject){(graphical as VexFlowGraphicalNote).getSVGGElement?.()?.remove();continue;}
                                     if (!staff?.ParentInstrument || !note.ParentVoiceEntry || measure.parentSourceMeasure !== note.SourceMeasure)
                                         continue;
                                     const part = osmd.Sheet.Instruments.indexOf(staff.ParentInstrument), mi = osmd.Sheet.SourceMeasures.indexOf(note.SourceMeasure), staffNumber = staff.ParentInstrument.Staves.indexOf(staff) + 1, pitch = note.Pitch;
                                     const canonical = review.score.parts[part]?.measures.find(m => m.index === mi);
-                                    const matches = all.filter(e => canonical?.voices.some(v => v.events.includes(e)) && e.staff === staffNumber && e.voice === rhythmicView.originalVoice(part,staffNumber,String(note.ParentVoiceEntry.ParentVoice.VoiceId)) && Math.abs(rational(e.onset) - note.ParentVoiceEntry.Timestamp.RealValue * 4) < 1e-7 && (e.grace || Math.abs(rational(e.duration) - note.Length.RealValue * 4) < 1e-7) && e.grace === !!note.IsGraceNote && e.kind === (note.isRest() ? 'rest' : 'note') && (note.isRest() || e.pitch?.step === Pitch.getNoteEnumString(pitch.FundamentalNote) && e.pitch.octave === pitch.Octave + Pitch.OctaveXmlDifference && Number(e.pitch.alter) === pitch.AccidentalHalfTones));
+                                    const matches = all.filter(e => canonical?.voices.some(v => v.events.includes(e)) && e.staff === staffNumber && e.voice === rhythmicView.originalVoice(part,staffNumber,String(note.ParentVoiceEntry.ParentVoice.VoiceId)) && Math.abs(rational(e.onset) - note.ParentVoiceEntry.Timestamp.RealValue * 4) < 1e-7 && (e.grace || Math.abs(rational(e.duration) - rhythmicView.originalDuration(part,staffNumber,String(note.ParentVoiceEntry.ParentVoice.VoiceId),note.ParentVoiceEntry.Timestamp.RealValue*4,note.isRest()?'rest':Pitch.getNoteEnumString(pitch.FundamentalNote)+(pitch.Octave+Pitch.OctaveXmlDifference),note.Length.RealValue*4)) < 1e-7) && e.grace === !!note.IsGraceNote && e.kind === (note.isRest() ? 'rest' : 'note') && (note.isRest() || e.pitch?.step === Pitch.getNoteEnumString(pitch.FundamentalNote) && e.pitch.octave === pitch.Octave + Pitch.OctaveXmlDifference && Number(e.pitch.alter) === pitch.AccidentalHalfTones));
                                     const vf = graphical as VexFlowGraphicalNote;
                                     const heads = vf.getNoteheadSVGs?.() ?? [], head = heads[vf.vfnote?.[1] ?? vf.vfnoteIndex] ?? (note.isRest() ? vf.getSVGGElement?.() : null);
                                     if (!head || matches.length !== 1)
@@ -297,9 +303,9 @@ export function RenderedScore({ onNoteMoveStart,onNoteMove,onDropResolver,header
                         },true);
                         svg.addEventListener('pointercancel',clearBox);
                         svg.addEventListener('pointerdown', e => { if(e.button!==0)return; if((e.target as Element).closest('[data-testid^="real-curve-"], [data-text-id], [data-mark-id], [data-harmony-id]')){svg.dataset.noteGesture='true';return;} const hits = [...bindings].filter(([n]) => n.closest('svg') === svg).map(([node, value]) => ({ ...value, box: node.getBoundingClientRect() })).filter(v => e.clientX >= v.box.left - 3 && e.clientX <= v.box.right + 3 && e.clientY >= v.box.top - 3 && e.clientY <= v.box.bottom + 3); svg.dataset.noteGesture = hits.length ? 'true' : 'false'; if (!hits.length)
-                            return; e.stopPropagation(); e.preventDefault(); down = { x: e.clientX, y: e.clientY, hits:live.current.selected&&hits.some(h=>h.event.id===live.current.selected)?hits.filter(h=>h.event.id===live.current.selected):hits }; svg.setPointerCapture(e.pointerId); }, true);
+                            return; e.stopPropagation(); e.preventDefault(); down = { x: e.clientX, y: e.clientY, hits:resolveNoteHits(hits,e.clientX,e.clientY) }; svg.setPointerCapture(e.pointerId); }, true);
                         svg.addEventListener('pointerup', e => { if (!down)
-                            return; e.stopPropagation(); if(moving){const id=down.hits[0].event.id,target=moveTarget;cancelMove();if(target)live.current.onNoteMove?.(id,target);return;} const dy = (e.clientY - down.y) / (down.hits[0].spacing / 2); if (down.hits.length === 1)
+                            return; e.stopPropagation(); if(moving){const id=down.hits[0].event.id,target=moveTarget;cancelMove();if(target)live.current.onNoteMove?.(id,target);return;} const dy = (e.clientY - down.y) / (down.hits[0].spacing / 2); if((e.ctrlKey||e.metaKey)&&Math.abs(e.clientX-down.x)<5&&Math.abs(e.clientY-down.y)<5){const id=down.hits[0].event.id;const ids=live.current.selection?.length?[...live.current.selection]:live.current.selected?[live.current.selected]:[];live.current.onSelection?.(ids.includes(id)?ids.filter(value=>value!==id):[...ids,id]);down=null;return;} if (down.hits.length === 1)
                             live.current.onHead?.(down.hits[0].event.id, dy);
                         else
                             live.current.onAmbiguous?.(down.hits.map(h => h.event.id), dy, down.hits[0].box); down = null; }, true);
@@ -542,6 +548,7 @@ export function RenderedScore({ onNoteMoveStart,onNoteMove,onDropResolver,header
                 for(const row of osmd.GraphicSheet.MeasureList)for(const measure of row)if(measure?.ParentStaffLine){const system=measure.ParentStaffLine.ParentMusicSystem;const box=system.PositionAndShape;systems.set(system,{top:(box.AbsolutePosition.y+box.BorderTop)*10*zoom,bottom:(box.AbsolutePosition.y+box.BorderBottom)*10*zoom});}
                 const ordered=[...systems.values()].sort((a,b)=>a.top-b.top);
                 if(element.querySelectorAll('svg').length===1)element.querySelector('svg')!.setAttribute('data-pdf-breaks',JSON.stringify(ordered.slice(1).map((s,i)=>(ordered[i].bottom+s.top)/2)));
+                element.querySelectorAll('[data-event-id]').forEach(n=>{const id=n.getAttribute('data-event-id')??'';const active=id===live.current.selected||live.current.selection.includes(id);n.classList.toggle('real-selected',active);n.setAttribute('aria-pressed',String(active));});
                 live.current.onReady?.(count);
                 setError('');
                 sectionLayers.forEach(append=>append());

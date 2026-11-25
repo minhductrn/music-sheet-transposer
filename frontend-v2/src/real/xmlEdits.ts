@@ -1,14 +1,13 @@
 import { events, rational, type Review } from './api';
 // Preserve the full XML document, modifying only explicitly selected beam tags.
-export function beamSelected(review: Review, ids: string[], count: number) {
+function editSelectedNotes(review: Review, ids: string[], count: number, stemDirection?: 'auto'|'up'|'down',lyricMode?:{verse:string;mode:string}) {
     if (ids.length !== count || new Set(ids).size !== count)
         throw Error(`Select exactly ${count} distinct notes.`);
     const selected = events(review).filter(e => ids.includes(e.id));
     if (selected.length !== count)
         throw Error('Selected notes changed. Select again.');
-    const first = selected[0];
-    if (selected.some(e => e.kind !== 'note' || e.chord_id || e.grace || e.voice !== first.voice || e.staff !== first.staff || e.measure_id !== first.measure_id || !['eighth', '16th', '32nd', '64th'].includes(e.notated_duration?.type ?? '')))
-        throw Error('Select beamable notes in one measure, voice and staff.');
+    // Draft engraving is explicit: do not reject imported chord, voice, staff,
+    // measure or written-duration conflicts. Validation is a separate command.
     const xml = new DOMParser().parseFromString(review.xml, 'application/xml');
     if (xml.querySelector('parsererror'))
         throw Error('MusicXML could not be parsed.');
@@ -16,11 +15,11 @@ export function beamSelected(review: Review, ids: string[], count: number) {
     const children = (e: Element, n: string) => [...e.children].filter(c => c.localName === n && c.namespaceURI === ns);
     const text = (e: Element, n: string, f = '') => children(e, n)[0]?.textContent ?? f;
     const nodes = new Map<string, Element>();
-    let measureIndex = 0;
-    for (const part of children(xml.documentElement, 'part')) {
+    const claimed = new Set<string>();
+    for (const [partIndex,part] of children(xml.documentElement, 'part').entries()) {
         let divisions = 1;
-        for (const measure of children(part, 'measure')) {
-            const mid = `m-${++measureIndex}`, model = review.score.parts.flatMap(p => p.measures).find(m => m.id === mid);
+        for (const [measureIndex,measure] of children(part, 'measure').entries()) {
+            const model = review.score.parts[partIndex]?.measures[measureIndex];
             let cursor = 0, previous = 0;
             for (const n of measure.children) {
                 if (n.localName === 'attributes') {
@@ -37,12 +36,13 @@ export function beamSelected(review: Review, ids: string[], count: number) {
                 }
                 if (n.localName !== 'note')
                     continue;
-                const chord = children(n, 'chord').length > 0, onset = chord ? previous : cursor, duration = Number(text(n, 'duration')) / divisions, pitch = children(n, 'pitch')[0], matches = model?.voices.flatMap(v => v.events).filter(e => e.voice === text(n, 'voice', '1') && e.staff === Number(text(n, 'staff', '1')) && Math.abs(rational(e.onset) - onset) < 1e-8 && Math.abs(rational(e.duration) - duration) < 1e-8 && e.pitch?.step === text(pitch ?? n, 'step') && e.pitch?.octave === Number(text(pitch ?? n, 'octave')) && Number(e.pitch?.alter) === Number(text(pitch ?? n, 'alter', '0')));
-                if (matches?.length === 1)
-                    nodes.set(matches[0].id, n);
+                const chord = children(n, 'chord').length > 0, onset = chord ? previous : cursor, duration = Number(text(n, 'duration')) / divisions, pitch = children(n, 'pitch')[0], matches = model?.voices.flatMap(v => v.events).filter(e => !claimed.has(e.id) && e.voice === text(n, 'voice', '1') && e.staff === Number(text(n, 'staff', '1')) && Math.abs(rational(e.onset) - onset) < 1e-8 && Math.abs(rational(e.duration) - duration) < 1e-8 && (pitch ? e.pitch?.step === text(pitch, 'step') && e.pitch?.octave === Number(text(pitch, 'octave')) && Number(e.pitch?.alter) === Number(text(pitch, 'alter', '0')) : !e.pitch));
+                // Equal/unison events remain individually editable: importer event
+                // order within each voice matches the XML stream order.
+                if (matches?.length) {nodes.set(matches[0].id,n);claimed.add(matches[0].id);}
                 if (!chord) {
                     previous = cursor;
-                    cursor += duration;
+                    if(!children(n,'grace').length)cursor += duration;
                 }
             }
         }
@@ -50,8 +50,26 @@ export function beamSelected(review: Review, ids: string[], count: number) {
     const targets = selected.map(e => nodes.get(e.id));
     if (targets.some(n => !n))
         throw Error('Ambiguous XML note mapping; no beam changes applied.');
+    if(lyricMode){
+        for(const target of targets)for(const lyric of children(target!,'lyric').filter(l=>(l.getAttribute('number')??'1')===lyricMode.verse)){
+            for(const old of children(lyric,'syllabic'))old.remove();
+            const syllabic=xml.createElementNS(ns,'syllabic');syllabic.textContent=lyricMode.mode;lyric.insertBefore(syllabic,lyric.firstChild);
+        }
+        return new XMLSerializer().serializeToString(xml);
+    }
+    if(stemDirection){
+        for(const target of targets){
+            const n=target!;for(const old of children(n,'stem'))old.remove();
+            if(stemDirection!=='auto'){
+                const stem=xml.createElementNS(ns,'stem');stem.textContent=stemDirection;
+                n.insertBefore(stem,[...n.children].find(c=>['notehead','notehead-text','staff','beam','notations','lyric','play','listen'].includes(c.localName))??null);
+            }
+        }
+        return new XMLSerializer().serializeToString(xml);
+    }
     // Engraving is a user-directed edit. XML append/backup order is not rhythmic order.
-    const sorted=selected.slice().sort((a,b)=>rational(a.onset)-rational(b.onset)||a.id.localeCompare(b.id)).map(e=>nodes.get(e.id)!);
+    const measureOrder=new Map(review.score.parts.flatMap(p=>p.measures).map((m,i)=>[m.id,i]));
+    const sorted=selected.slice().sort((a,b)=>(measureOrder.get(a.measure_id)??0)-(measureOrder.get(b.measure_id)??0)||rational(a.onset)-rational(b.onset)||a.id.localeCompare(b.id)).map(e=>nodes.get(e.id)!);
     const levels=sorted.map(n=>({'eighth':1,'16th':2,'32nd':3,'64th':4}[text(n,'type')]??1));
     for(const n of sorted)for(const old of children(n,'beam'))old.remove();
     sorted.forEach((n,i)=>{
@@ -64,6 +82,10 @@ export function beamSelected(review: Review, ids: string[], count: number) {
     });
     return new XMLSerializer().serializeToString(xml);
 }
+
+export function beamSelected(review: Review, ids:string[], count:number){return editSelectedNotes(review,ids,count);}
+export function setLyricSyllabic(review:Review,ids:string[],verse:string,mode:string){return editSelectedNotes(review,ids,ids.length,undefined,{verse,mode});}
+export function setSelectedStem(review:Review,ids:string[],direction:'auto'|'up'|'down'){return editSelectedNotes(review,ids,ids.length,direction);}
 
 // Explicit user action: add one empty, inherited-meter measure to a single written part.
 export function appendMeasure(review: Review) {

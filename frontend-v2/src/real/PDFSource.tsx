@@ -2,7 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import type {PDFDocumentProxy,RenderTask} from 'pdfjs-dist';
 import workerURL from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
-export function PDFSource({file,zoom}:{file:File;zoom:number}){
+export function PDFSource({file,zoom,sourceURL}:{file:File;zoom:number;sourceURL?:string}){
  const host=useRef<HTMLDivElement>(null);
  const [document,setDocument]=useState<PDFDocumentProxy|null>(null);
  const [width,setWidth]=useState(500),[error,setError]=useState(''),[loading,setLoading]=useState(true);
@@ -11,14 +11,14 @@ export function PDFSource({file,zoom}:{file:File;zoom:number}){
   setLoading(true);setError('');setDocument(null);
   void (async()=>{try{
    const pdfjs=await import('pdfjs-dist');pdfjs.GlobalWorkerOptions.workerSrc=workerURL;
-   const loadingTask=pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer())});task=loadingTask;
+   const loadingTask=pdfjs.getDocument(sourceURL?{url:sourceURL}:{data:new Uint8Array(await file.arrayBuffer())});task=loadingTask;
    const doc=await loadingTask.promise;
    if(disposed){await loadingTask.destroy();return;}
    if(doc.numPages<1||doc.numPages>10){await loadingTask.destroy();throw Error('Source PDF must contain 1–10 pages.');}
    setDocument(doc);
   }catch(ex){if(!disposed){setError(ex instanceof Error?ex.message:'Cannot display the original PDF.');setLoading(false);}}})();
   return()=>{disposed=true;void task?.destroy();};
- },[file]);
+ },[file,sourceURL]);
  useEffect(()=>{const el=host.current;if(!el||!document)return;let disposed=false;const tasks:RenderTask[]=[];el.replaceChildren();setLoading(true);setError('');
   void(async()=>{try{let pixels=0;
    for(let number=1;number<=document.numPages;number++){

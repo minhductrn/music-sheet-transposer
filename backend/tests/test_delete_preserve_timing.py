@@ -93,12 +93,15 @@ def test_legacy_delete_still_shifts_imported_notes(workflow):
 
 
 @pytest.mark.parametrize('notes', [note('C', 0) + note('D', 4), note('C', 2) + note('E', 1, chord=True) + note('D', 2)])
-def test_ambiguous_or_duration_changing_deletion_rejected_atomically(workflow, notes):
+def test_inconsistent_imported_duration_does_not_block_deletion(workflow, notes):
     client, _ = workflow
     before = create(client, score(notes))
     result = request(client, before, 'events/e-1/delete-preserve-timing')
-    assert result.status_code == 422
-    assert client.get(f'/api/v1/reviews/{before["id"]}').json() == before
+    assert result.status_code == 200, result.text
+    after=result.json()
+    unchanged_survivors(before,after,'e-1')
+    assert 'e-1' not in events(after)
+    assert xml(request(client,after,'undo').json())==xml(before)
 
 
 def test_positioned_note_has_one_compensation_and_stale_revision_rejected(workflow):

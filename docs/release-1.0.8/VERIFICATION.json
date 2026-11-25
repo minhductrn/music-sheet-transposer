@@ -1,0 +1,17 @@
+{
+  "version": "1.0.8",
+  "package_verification": "PENDING",
+  "source_checks": [
+    "Backend full suite: 1150 passed, 3 skipped",
+    "Frontend unit suite: 77 passed",
+    "Typecheck and lint: PASS",
+    "Initial browser harness failures: detached DOM bounds, instrument notice locator, and engraving-only span expectation; corrected and retained in test history."
+  ],
+  "browser_checks": "Source targeted runs: core correction/PDF cases passed; corrected harness timing/notice assertions are rerun on exact package.",
+  "package_checks": [],
+  "limits": [
+    "Full legacy browser suite and fresh OMR recognition have not been rerun.",
+    "No separate external technical reviewer sign-off recorded.",
+    "Existing dependency deprecation and bundle-size warnings remain."
+  ]
+}

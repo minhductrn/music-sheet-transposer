@@ -38,3 +38,30 @@ test('A full OMR measure warns but permits sequential correction',async({page})=
   const result=await response.json();expect(result.score.parts[0].measures[0].voices[0].events.map((e:{duration:string})=>e.duration)).toEqual(['1','3','1']);
  } finally {for(const id of ids)await page.request.delete('/api/v1/reviews/'+id,{timeout:3000}).catch(()=>{});}
 });
+
+for(const placement of ['before','after'])for(const size of ['normal','small'])test(`Add ${placement} inherits Voice 2 and ${size} size through Undo and reimport`,async({page})=>{
+ const ids=new Set<string>();let original='';page.on('response',async r=>{if(r.request().method()==='POST'&&r.url().endsWith('/reviews')&&r.ok()){const body=await r.json();ids.add(body.id);if(!original)original=body.musicxml_base64;}});
+ const type=size==='small'?'<type size="cue">quarter</type><notehead font-size="small">normal</notehead>':'<type>quarter</type>';
+ const xml=`<score-partwise version="4.0"><part-list><score-part id="P"><part-name>Voice</part-name></score-part></part-list><part id="P"><measure number="1"><attributes><divisions>2</divisions><time><beats>4</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes><note><pitch><step>B</step><alter>-1</alter><octave>4</octave></pitch><duration>2</duration><voice>2</voice>${type}</note></measure></part></score-partwise>`;
+ try{
+  await page.goto('/');await page.locator('input[type=file]').setInputFiles({name:'inherit-note-properties.musicxml',mimeType:'application/xml',buffer:Buffer.from(xml)});
+  const head=page.getByRole('button',{name:'Note e-1, voice 2',exact:true});await expect(head).toBeVisible();await head.focus();await head.press('Enter');await page.getByRole('button',{name:'Add note '+placement,exact:true}).click();
+  await expect(page.getByLabel('New note voice',{exact:true})).toHaveValue('2');await expect(page.getByLabel('New note size',{exact:true})).toHaveValue(size);
+  const pending=page.waitForResponse(r=>r.request().method()==='POST'&&/\/reviews\/[^/]+\/events$/.test(r.url()));await page.getByRole('button',{name:'Insert note',exact:true}).click();const response=await pending;expect(response.ok()).toBeTruthy();const result=await response.json();
+  const events=(r:typeof result)=>r.score.parts[0].measures[0].voices.flatMap((v:{events:{id:string;voice:string;staff:number;display_size:string;pitch:unknown}[]})=>v.events);
+  const added=events(result).find((e:{id:string})=>e.id!=='e-1');expect(added).toMatchObject({voice:'2',staff:1,display_size:size,pitch:{step:'B',alter:'-1',octave:4}});
+  const reopened=await page.request.post('/api/v1/reviews',{multipart:{musicxml:{name:'inherited-roundtrip.musicxml',mimeType:'application/xml',buffer:Buffer.from(result.musicxml_base64,'base64')}}});expect(reopened.ok()).toBeTruthy();const roundtrip=await reopened.json();ids.add(roundtrip.id);expect(events(roundtrip).every((e:{voice:string;display_size:string})=>e.voice==='2'&&e.display_size===size)).toBeTruthy();
+  const undo=page.waitForResponse(r=>r.url().endsWith('/undo'));await page.getByRole('button',{name:/Undo/}).click();expect((await(await undo).json()).musicxml_base64).toBe(original);
+ }finally{for(const id of ids)await page.request.delete('/api/v1/reviews/'+id,{timeout:3000}).catch(()=>{});}
+});
+
+test('New-note properties can be overridden, and reopening resets Voice and size to the selection',async({page})=>{
+ const ids=new Set<string>();page.on('response',async r=>{if(r.request().method()==='POST'&&r.url().endsWith('/reviews')&&r.ok())ids.add((await r.json()).id);});
+ const xml='<score-partwise version="4.0"><part-list><score-part id="P"><part-name>Voice</part-name></score-part></part-list><part id="P"><measure number="1"><attributes><divisions>2</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes><note><pitch><step>C</step><octave>5</octave></pitch><duration>2</duration><voice>2</voice><type size="cue">quarter</type><notehead font-size="small">normal</notehead></note></measure></part></score-partwise>';
+ try{
+  await page.goto('/');await page.locator('input[type=file]').setInputFiles({name:'override-inheritance.musicxml',mimeType:'application/xml',buffer:Buffer.from(xml)});const head=page.getByRole('button',{name:'Note e-1, voice 2',exact:true});await expect(head).toBeVisible();await head.focus();await head.press('Enter');
+  await page.getByRole('button',{name:'Add note after',exact:true}).click();await page.getByLabel('New note voice',{exact:true}).fill('3');await page.getByLabel('New note size',{exact:true}).selectOption('normal');await page.getByRole('button',{name:'Cancel adding note',exact:true}).click();
+  await page.getByRole('button',{name:'Add note before',exact:true}).click();await expect(page.getByLabel('New note voice',{exact:true})).toHaveValue('2');await expect(page.getByLabel('New note size',{exact:true})).toHaveValue('small');
+  await page.getByLabel('New note voice',{exact:true}).fill('3');await page.getByLabel('New note size',{exact:true}).selectOption('normal');const pending=page.waitForResponse(r=>r.request().method()==='POST'&&/\/reviews\/[^/]+\/events$/.test(r.url()));await page.getByRole('button',{name:'Insert note',exact:true}).click();const response=await pending;expect(response.ok()).toBeTruthy();const result=await response.json();const notes=result.score.parts[0].measures[0].voices.flatMap((v:{events:{id:string;voice:string;display_size:string}[]})=>v.events);expect(notes.find((e:{id:string})=>e.id==='e-1')).toMatchObject({voice:'2',display_size:'small'});expect(notes.find((e:{id:string})=>e.id!=='e-1')).toMatchObject({voice:'3',display_size:'normal'});
+ }finally{for(const id of ids)await page.request.delete('/api/v1/reviews/'+id,{timeout:3000}).catch(()=>{});}
+});

@@ -88,13 +88,13 @@ def triplet(doc, identifier, request):
         onset = rational(request.onset)
         if onset is None or not 0 <= onset <= 1024:
             raise ReviewError('Choose an explicit nonnegative triplet onset.')
-        if request.staff > info.staves:
+        if not request.draft_edit and request.staff > info.staves:
             raise ReviewError('Staff exceeds the declared staff count.')
         for voice in info.voices:
             for e in voice.events:
                 if e.voice == request.voice and not e.grace:
                     start, duration = rational(e.onset), rational(e.duration)
-                    if start is None or duration is None:
+                    if not request.draft_edit and (start is None or duration is None):
                         raise ReviewError('Triplet insertion requires known event timing.')
                     if not request.draft_edit and onset < start + duration and start < onset + count * effective:
                         raise ReviewError('The triplet overlaps existing content. Delete the incorrect notes with timing preserved or choose an empty location.')
@@ -213,7 +213,7 @@ def mixed_triplet(doc, identifier, request):
             for e in voice.events:
                 if e.voice == request.voice and not e.grace:
                     start, duration = rational(e.onset), rational(e.duration)
-                    if start is None or duration is None:
+                    if not request.draft_edit and (start is None or duration is None):
                         raise ReviewError('Insertion requires known musical timing.')
                     if not request.draft_edit and onset < start + duration and start < onset + 1:
                         raise ReviewError('The triplet overlaps existing content. Delete with timing preserved or choose an unoccupied location.')

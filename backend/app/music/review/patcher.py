@@ -33,7 +33,9 @@ def remove(doc, parent, name):
         parent.remove(child)
 
 
-def pitch_patch(doc, note, pitch: PitchInput):
+def pitch_patch(doc, note, pitch: PitchInput, draft_edit=False):
+    if draft_edit:
+        remove(doc,note,"rest");remove(doc,note,"unpitched")
     if doc.child(note, "rest") is not None or doc.child(note, "unpitched") is not None:
         raise ReviewError("Pitch edits require a pitched note. Add a note to replace a rest/unpitched event.")
     node = put(doc, note, "pitch")
@@ -52,8 +54,11 @@ def pitch_patch(doc, note, pitch: PitchInput):
             remove(doc, note, "accidental")  # Alter still retains the exact sounding pitch.
 
 
-def size_patch(doc, note, size):
+def size_patch(doc, note, size, draft_edit=False):
     note_type = doc.child(note, "type")
+    if draft_edit and note_type is None and size == "cue":
+        put(doc,note,"notehead","normal").set("font-size","small")
+        return
     if note_type is None and size == "cue":
         raise ReviewError("A size edit requires a note type; correct its duration first.")
     head = doc.child(note, "notehead")
@@ -112,6 +117,10 @@ def duration_patch(doc, note, duration: str, divisions, grace=False, draft_edit=
     if value is None or value <= 0 or value > 1024 or scale is None or scale <= 0:
         raise ReviewError("Duration must be positive quarter beats with valid divisions (maximum 1024 beats).")
     units = value * scale
+    if draft_edit and units.denominator != 1:
+        from .triplets import refine_divisions
+        scale=refine_divisions(doc,doc.parent(note),scale,units.denominator)
+        units=value*scale
     if units.denominator != 1:
         raise ReviewError("That duration cannot be represented with this measure's divisions.")
     visual = value
@@ -146,6 +155,10 @@ def duration_patch(doc, note, duration: str, divisions, grace=False, draft_edit=
                     type_node = doc.child(note, "type")
                     note.insert(list(note).index(type_node) + 1, dot)
                 return
+    if draft_edit:
+        if grace:remove(doc,note,"duration")
+        else:put(doc,note,"duration",int(units))
+        return
     raise ReviewError("That duration has no supported note type/dot spelling. Existing tuplet ratios are retained.")
 
 
@@ -237,10 +250,10 @@ def patch_event(doc: Document, identifier: str, patch: EventPatch):
         original_score, _ = import_score(doc)
         accidental_entries = entries_for(original_score)
     members = group(doc, note)
-    if patch.staff is not None and patch.staff > measure.staves:
+    if not patch.draft_edit and patch.staff is not None and patch.staff > measure.staves:
         raise ReviewError("Staff exceeds the part's declared staff count.")
     if patch.pitch:
-        pitch_patch(doc, note, patch.pitch)
+        pitch_patch(doc, note, patch.pitch, patch.draft_edit)
     if "written_accidental" in patch.model_fields_set:
         if patch.written_accidental is None:
             remove(doc, note, "accidental")
@@ -262,13 +275,13 @@ def patch_event(doc: Document, identifier: str, patch: EventPatch):
     if patch.grace is not None:
         for member in members:
             if grace:
-                if doc.child(member, "cue") is not None:
+                if not patch.draft_edit and doc.child(member, "cue") is not None:
                     raise ReviewError("Cue and grace semantics cannot coexist. Edit cue semantics in a notation editor.")
                 put(doc, member, "grace")
                 remove(doc, member, "duration")
             else:
                 remove(doc, member, "grace")
-        if not grace and event.grace and patch.duration is None:
+        if not patch.draft_edit and not grace and event.grace and patch.duration is None:
             raise ReviewError("Converting grace to a regular note requires an explicit duration.")
     if patch.grace_slash is not None:
         if not grace:
@@ -298,7 +311,7 @@ def patch_event(doc: Document, identifier: str, patch: EventPatch):
             parent = doc.parent(leader)
             parent.insert(list(parent).index(members[-1]) + 1, compensation)
     if patch.display_size:
-        size_patch(doc, note, patch.display_size)
+        size_patch(doc, note, patch.display_size, patch.draft_edit)
     if tie_edit:
         from .ties import set_target
         changed = set_target(doc, identifier, patch.tie_to_event_id)
@@ -336,7 +349,7 @@ def add_event(doc: Document, identifier: str, request: EventAdd):
     info, event = context(doc, anchor, request.measure_id if anchor is None else None)
     note = ET.Element(doc.namespace + "note")
     voice, staff = request.voice or (event.voice if event else "1"), request.staff or (event.staff if event else 1)
-    if staff is None or staff > info.staves:
+    if staff is None or (not request.draft_edit and staff > info.staves):
         raise ReviewError("Staff exceeds the part's declared staff count.")
     if request.kind == "rest":
         put(doc, note, "rest")
@@ -359,8 +372,8 @@ def add_event(doc: Document, identifier: str, request: EventAdd):
         # Legacy chord requests without an explicit duration retain the anchor rhythm.
         if "duration" in request.model_fields_set:
             preceding = group(doc, anchor)[-1]
-            duration_patch(doc, note, request.duration, info.divisions)
-            if rational(request.duration) > rational(doc.text(preceding, "duration")) / rational(info.divisions):
+            duration_patch(doc, note, request.duration, info.divisions, draft_edit=request.draft_edit)
+            if not request.draft_edit and rational(request.duration) > rational(doc.text(preceding, "duration")) / rational(info.divisions):
                 raise ReviewError("A chord member cannot exceed the preceding duration; use exact-onset placement.")
         put(doc, note, "chord")
         # Type size copied from the anchor is replaced with the explicitly requested display size.
@@ -371,7 +384,7 @@ def add_event(doc: Document, identifier: str, request: EventAdd):
                 grace_node.set("slash", "yes" if request.grace_slash else "no")
         elif request.grace_slash is not None:
             raise ReviewError("A grace slash requires a grace note.")
-        duration_patch(doc, note, request.duration, info.divisions, request.grace)
+        duration_patch(doc, note, request.duration, info.divisions, request.grace, request.draft_edit)
     if request.written_accidental is not None:
         accidental_patch(doc, note, request.written_accidental)
     put(doc, note, "voice", voice)
@@ -393,6 +406,10 @@ def add_event(doc: Document, identifier: str, request: EventAdd):
         position = next((i for i, element in enumerate(measure) if local(element.tag) == "barline" and element.get("location", "right") == "right"), len(measure))
     measure.insert(position, note)
     doc.refs[identifier] = note
+    if request.grace and request.grace_slur and request.before_event_id:
+        from .slurs import apply as apply_slur
+        from .models import SlurEdit
+        apply_slur(doc,SlurEdit(source_event_id=identifier,target_event_id=request.before_event_id,draft_edit=True))
     if request.tie_to_event_id:
         from .ties import connect
         connect(doc, identifier, request.tie_to_event_id)
@@ -403,19 +420,23 @@ def delete_preserving_timing(doc: Document, identifier: str):
     """Remove one pitch/event while preserving the existing XML cursor advance."""
     note = doc.get(identifier, "note")
     measure = doc.parent(note)
-    score, issues = import_score(doc)
+    score, _ = import_score(doc)
     mid = next(key for key, node in doc.refs.items() if node is measure)
-    timing_errors = {"invalid_divisions", "invalid_timing", "invalid_duration",
-                     "broken_chord", "invalid_voice", "invalid_staff", "grace_duration"}
-    if any(i.measure_id == mid and i.code in timing_errors for i in issues):
-        raise ReviewError("Cannot preserve timing: invalid MusicXML timing or event ownership.")
     events = [e for p in score.parts for m in p.measures if m.id == mid for v in m.voices for e in v.events]
-    if any(e.onset is None or (not e.grace and (e.duration is None or e.divisions is None)) for e in events):
-        raise ReviewError("Cannot preserve timing: event timing is unresolved.")
     members = group(doc, note)
-    if members[0] is note and len(members) > 1 and doc.child(note, "grace") is None:
-        if rational(doc.text(note, "duration")) != rational(doc.text(members[1], "duration")):
-            raise ReviewError("Cannot preserve timing without changing a surviving chord note's duration.")
+    promoted=members[1] if members[0] is note and len(members)>1 else None
+    promoted_duration=doc.text(promoted,'duration') if promoted is not None else None
+    old_units=rational(doc.text(note,'duration'))
+    # Deleting the malformed object is itself a correction. Unrelated OMR
+    # diagnostics cannot veto removal; never invent its missing duration.
+    if doc.child(note,'grace') is None and old_units is None:
+        from .ties import disconnect_deleted
+        disconnect_deleted(doc,identifier)
+        measure.remove(note)
+        if promoted is not None:remove(doc,promoted,'chord')
+        removed=set(note.iter());doc.refs={k:n for k,n in doc.refs.items() if n not in removed}
+        doc.positioned_events.discard(identifier);doc.changed=True
+        return
     event = next(e for e in events if e.id == identifier)
     index = list(measure).index(note)
     # Existing deletion already compensates positioned standalone events. Reuse
@@ -426,11 +447,20 @@ def delete_preserving_timing(doc: Document, identifier: str):
     if len(members) == 1 and not event.grace:
         forward = list(measure)[index]
         ET.SubElement(forward, doc.namespace + "voice").text = event.voice
-        ET.SubElement(forward, doc.namespace + "staff").text = str(event.staff)
+        if event.staff is not None:ET.SubElement(forward, doc.namespace + "staff").text = str(event.staff)
+    if promoted is not None and promoted_duration is not None:
+        put(doc,promoted,'duration',promoted_duration)
+        promoted_units=rational(promoted_duration)
+        if old_units is not None and promoted_units is not None and old_units!=promoted_units:
+            delta=old_units-promoted_units
+            compensation=ET.Element(doc.namespace+('forward' if delta>0 else 'backup'))
+            from .triplets import xml_units
+            ET.SubElement(compensation,doc.namespace+'duration').text=xml_units(abs(delta))
+            measure.insert(list(measure).index(members[-1])+1,compensation)
     after, _ = import_score(doc)
     surviving = {e.id: e for p in after.parts for m in p.measures if m.id == mid for v in m.voices for e in v.events}
     for old in events:
-        if old.id == identifier:
+        if old.id == identifier or old.onset is None or old.duration is None:
             continue
         new = surviving.get(old.id)
         if new is None or (new.onset, new.duration, new.voice, new.staff, new.grace) != (old.onset, old.duration, old.voice, old.staff, old.grace):
@@ -556,9 +586,9 @@ def add_at_position(doc, identifier, request):
     if onset is None or not 0 <= onset <= 1024 or request.voice is None or request.staff is None:
         raise ReviewError("Explicit insertion requires a nonnegative onset, explicit voice and staff.")
     info, cursor, scale = position_context(doc, request.measure_id, request.draft_edit)
-    if request.staff > info.staves:
+    if not request.draft_edit and request.staff > info.staves:
         raise ReviewError("Staff exceeds the part's declared staff count.")
-    if any(e.onset is None or (not e.grace and e.duration is None) for v in info.voices for e in v.events):
+    if not request.draft_edit and any(e.onset is None or (not e.grace and e.duration is None) for v in info.voices for e in v.events):
         raise ReviewError("Insertion cannot resolve ambiguous event timing.")
     duration = rational(request.duration)
     if duration is None or not 0 < duration <= 1024:
@@ -568,7 +598,7 @@ def add_at_position(doc, identifier, request):
     if not request.draft_edit and not request.grace and gaps and all(onset + duration > rational(g['onset']) + rational(g['duration']) for g in gaps):
         raise ReviewError("The note exceeds the available insertion interval.")
     existing = [e for v in info.voices for e in v.events if e.voice == request.voice and not e.grace]
-    overlaps = [e for e in existing if not request.grace and onset < rational(e.onset) + rational(e.duration)
+    overlaps = [e for e in existing if not request.grace and e.onset is not None and e.duration is not None and onset < rational(e.onset) + rational(e.duration)
                 and rational(e.onset) < onset + duration]
     if overlaps:
         leaders = {e.chord_id or e.id for e in overlaps}

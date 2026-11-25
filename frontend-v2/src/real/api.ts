@@ -63,6 +63,7 @@ export type Measure = {
     }[];
 };
 export type Lyric = {
+    syllabic?:string|null;
     id: string;
     event_id: string;
     number: string;
@@ -134,6 +135,7 @@ catch (error) {
     throw error;
 } }
 export const xmlBlob = (xml: string) => new Blob([xml], { type: 'application/vnd.recordare.musicxml+xml' });
+export async function resumeReview(id:string){return projection(await fetch(`/api/v1/reviews/${encodeURIComponent(id)}`));}
 export async function openXML(file: Blob) { const form = new FormData(); form.append('musicxml', file, 'concert.musicxml'); return projection(await fetch('/api/v1/reviews', { method: 'POST', body: form })); }
 export async function keepReviewAlive(id:string){await checked(await fetch(`/api/v1/reviews/${encodeURIComponent(id)}/keepalive`,{method:'POST'}));}
 export async function closeReview(id: string) { await fetch(`/api/v1/reviews/${encodeURIComponent(id)}`, { method: 'DELETE', keepalive: true }); }
