@@ -1,0 +1,28 @@
+{
+  "backend": {
+    "passed": 1150,
+    "skipped": 3,
+    "warnings": 2
+  },
+  "frontend_unit": {
+    "passed": 77
+  },
+  "lint": "PASS",
+  "build": "PASS",
+  "package_browser": {
+    "package_total_distinct_cases_passed": 76,
+    "initial_package_run": "72 passed; 4 toast-locator assertions failed although final backend and UI state showed success",
+    "corrected_followup": "4 passed using last mutation response plus persisted Voice 2/Small assertions",
+    "coverage": [
+      "Beam 2\u20138 selected groups",
+      "Reverse XML append order and overlapping explicit beams",
+      "Nonblocking draft correction, Validate then byte-exact Save on Concert/Alto/Soprano/Tenor",
+      "Independent voice column alignment and lyric collision/verse layout",
+      "Grace/slur zero-beat behavior",
+      "Shared typed/multiple voice control, note insertion inheritance and stem direction",
+      "PDF hidden spacers and Auto/Standard margins through the actual Export PDF dialog",
+      "Lyric syllable connection without note/text changes",
+      "Resume identity/history; tuplets, Undo/Redo and instrument independence"
+    ]
+  }
+}

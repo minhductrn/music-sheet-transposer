@@ -1,17 +1,46 @@
 {
   "version": "1.0.8",
-  "package_verification": "PENDING",
+  "package_verification": "PASS",
   "source_checks": [
     "Backend full suite: 1150 passed, 3 skipped",
     "Frontend unit suite: 77 passed",
     "Typecheck and lint: PASS",
     "Initial browser harness failures: detached DOM bounds, instrument notice locator, and engraving-only span expectation; corrected and retained in test history."
   ],
-  "browser_checks": "Source targeted runs: core correction/PDF cases passed; corrected harness timing/notice assertions are rerun on exact package.",
-  "package_checks": [],
+  "browser_checks": {
+    "package_total_distinct_cases_passed": 76,
+    "initial_package_run": "72 passed; 4 toast-locator assertions failed although final backend and UI state showed success",
+    "corrected_followup": "4 passed using last mutation response plus persisted Voice 2/Small assertions",
+    "coverage": [
+      "Beam 2\u20138 selected groups",
+      "Reverse XML append order and overlapping explicit beams",
+      "Nonblocking draft correction, Validate then byte-exact Save on Concert/Alto/Soprano/Tenor",
+      "Independent voice column alignment and lyric collision/verse layout",
+      "Grace/slur zero-beat behavior",
+      "Shared typed/multiple voice control, note insertion inheritance and stem direction",
+      "PDF hidden spacers and Auto/Standard margins through the actual Export PDF dialog",
+      "Lyric syllable connection without note/text changes",
+      "Resume identity/history; tuplets, Undo/Redo and instrument independence"
+    ]
+  },
+  "package_checks": [
+    "Standalone /usr/bin/python3 -I -B start.py --check: PASS",
+    "Exact packaged application served on an isolated loopback port for the browser tests",
+    "Manifest application source hashes match the release source checkpoint",
+    "Linux/Python ABI and inherited runtime/OMR prerequisites verified by launcher"
+  ],
   "limits": [
     "Full legacy browser suite and fresh OMR recognition have not been rerun.",
     "No separate external technical reviewer sign-off recorded.",
     "Existing dependency deprecation and bundle-size warnings remain."
-  ]
+  ],
+  "source_checkpoint": "a121bd1",
+  "post_seal_checks": [
+    "Archive extracted into a fresh temporary directory; integrity and Python ABI PASS",
+    "Windows direct launcher copied to a local Windows path and executed --check through WSL: PASS"
+  ],
+  "publication_status": {
+    "git_source_and_tag": "SSH publication requested; remote refs are verified after push.",
+    "github_release_assets": "Requires renewed GitHub authentication; CLI token expired and browser is signed out."
+  }
 }

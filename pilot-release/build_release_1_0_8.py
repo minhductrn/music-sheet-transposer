@@ -44,6 +44,7 @@ def main():
  shutil.copytree(ROOT/'frontend-v2/dist',OUT/'web')
  shutil.copy2(ROOT/'pilot-release/release_start.py',OUT/'start.py')
  shutil.copy2(ROOT/'pilot-release/Start-Production.ps1',OUT/'Start-Production.ps1')
+ shutil.copy2(ROOT/'pilot-release/Start-Production-1.0.8.cmd',OUT/'Start-Production-1.0.8.cmd')
  for name in ['PRODUCT_CONSTITUTION.md','ACCEPTANCE_CRITERIA.md']:
   shutil.copy2(ROOT/name,OUT/name)
  shutil.copytree(ROOT/'backend/app',OUT/'backend/app',dirs_exist_ok=True,ignore=shutil.ignore_patterns('__pycache__','*.pyc'))

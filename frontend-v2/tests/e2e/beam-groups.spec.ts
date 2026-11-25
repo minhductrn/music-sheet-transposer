@@ -1,5 +1,5 @@
 import {test,expect} from '@playwright/test';
-for(const count of [2,3,4,5,6,7,8])test('Beam '+count+' explicitly selected notes survives Save',async({page})=>{
+for(const count of [2,3,4,5,6,7,8])test('Beam '+count+' explicitly selected notes',async({page})=>{
  const ids=new Set<string>();page.on('response',async r=>{if(r.request().method()==='POST'&&(r.url().endsWith('/reviews')||r.url().endsWith('/document-correction'))&&r.ok())ids.add((await r.json()).id);});
  const notes=Array.from({length:count},()=>'<note><pitch><step>C</step><octave>5</octave></pitch><duration>1</duration><voice>2</voice><type>eighth</type></note>').join('');
  const xml='<score-partwise version="4.0"><part-list><score-part id="P"><part-name>Beam regression</part-name></score-part></part-list><part id="P"><measure number="1"><attributes><divisions>2</divisions><time><beats>4</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes>'+notes+'</measure></part></score-partwise>';

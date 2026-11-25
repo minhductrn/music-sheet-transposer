@@ -1,0 +1,11 @@
+{
+  "version": "1.0.8",
+  "archive": "music-sheet-transposer-1.0.8.tar.gz",
+  "sha256": "3378404b36aac0076d02025eb8612e28a91f54ef364773d49f21ac2fe85553f2",
+  "manifest_sha256": "d3026ec6da0983f1be466d3a10af58cc08635140e6425e1ec10dbcddeb70fb7d",
+  "source_checkpoint": "a121bd1a468f28ff8de93216615b2a0aa0d8f475",
+  "sealed": true,
+  "extracted_integrity_and_ABI": "PASS",
+  "package_browser_cases_passed": 76,
+  "github_assets": "PENDING_AUTHENTICATION"
+}
