@@ -6,6 +6,8 @@ Import PDF/images through local OMR or open MusicXML directly, correct Working S
 
 ## Download and start
 
+[Download production 1.0.8](https://github.com/minhductrn/music-sheet-transposer/releases/tag/v1.0.8) — archive, SHA-256 checksum and Windows launcher.
+
 Release 1.0.8 is Product Owner accepted for official local use. Package and publication evidence are recorded under docs/release-1.0.8. Extract into a new directory and retain all older packages.
 
 From Ubuntu WSL:
@@ -21,7 +23,7 @@ Windows PowerShell can invoke the installed release without running a PowerShell
 wsl.exe -d Ubuntu --exec /usr/bin/python3 -B /home/dtran/music-sheet-transposer-releases/music-sheet-transposer-1.0.8/start.py --port 5250
 ```
 
-The included [Windows launcher](https://github.com/minhductrn/music-sheet-transposer/blob/v1.0.8/pilot-release/Start-Production-1.0.8.cmd) runs this installed path directly. It does not change PowerShell execution policy. Extract the package into the recorded directory first.
+The included [Windows launcher](https://github.com/minhductrn/music-sheet-transposer/releases/download/v1.0.8/Start-Production-1.0.8.cmd) runs this installed path directly. It does not change PowerShell execution policy. Extract the package into the recorded directory first.
 
 Open **http://localhost:5250**. Keep the terminal open. Save MusicXML before Ctrl+C. Use another free `--port` if occupied. Updating the app does not require a WSL-wide shutdown or Docker. The header identifies version 1.0.8.
 

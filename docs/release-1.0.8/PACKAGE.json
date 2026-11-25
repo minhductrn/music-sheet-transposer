@@ -7,5 +7,6 @@
   "sealed": true,
   "extracted_integrity_and_ABI": "PASS",
   "package_browser_cases_passed": 76,
-  "github_assets": "PENDING_AUTHENTICATION"
+  "github_assets": "PUBLISHED_AND_VERIFIED",
+  "release_url": "https://github.com/minhductrn/music-sheet-transposer/releases/tag/v1.0.8"
 }

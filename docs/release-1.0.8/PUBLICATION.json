@@ -1,0 +1,29 @@
+{
+  "version": "1.0.8",
+  "published_at": "2026-11-25T20:23:58Z",
+  "release_url": "https://github.com/minhductrn/music-sheet-transposer/releases/tag/v1.0.8",
+  "tag": "v1.0.8",
+  "tag_commit": "cafaea4401657c3dfe5898d5f4bd0f7bb58fee84",
+  "draft": false,
+  "prerelease": false,
+  "assets": [
+    {
+      "name": "music-sheet-transposer-1.0.8.tar.gz",
+      "size": 12933560,
+      "digest": "sha256:3378404b36aac0076d02025eb8612e28a91f54ef364773d49f21ac2fe85553f2",
+      "browser_download_url": "https://github.com/minhductrn/music-sheet-transposer/releases/download/v1.0.8/music-sheet-transposer-1.0.8.tar.gz"
+    },
+    {
+      "name": "music-sheet-transposer-1.0.8.tar.gz.sha256",
+      "size": 102,
+      "digest": "sha256:b047a1330e484966582e939e6dc5c2f804ad9d7ef8ae862b181724a475eca6b3",
+      "browser_download_url": "https://github.com/minhductrn/music-sheet-transposer/releases/download/v1.0.8/music-sheet-transposer-1.0.8.tar.gz.sha256"
+    },
+    {
+      "name": "Start-Production-1.0.8.cmd",
+      "size": 225,
+      "digest": "sha256:f4f10435f0820da95567ae8549a774c64f6889ec9bee0ef5d71acc152fa383a7",
+      "browser_download_url": "https://github.com/minhductrn/music-sheet-transposer/releases/download/v1.0.8/Start-Production-1.0.8.cmd"
+    }
+  ]
+}

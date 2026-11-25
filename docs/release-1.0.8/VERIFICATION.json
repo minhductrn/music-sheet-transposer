@@ -40,7 +40,9 @@
     "Windows direct launcher copied to a local Windows path and executed --check through WSL: PASS"
   ],
   "publication_status": {
-    "git_source_and_tag": "SSH publication requested; remote refs are verified after push.",
-    "github_release_assets": "Requires renewed GitHub authentication; CLI token expired and browser is signed out."
+    "git_source_and_tag": "master and feature/working-score-text pushed; v1.0.8 points to cafaea4401657c3dfe5898d5f4bd0f7bb58fee84",
+    "github_release_assets": "PUBLISHED_AND_VERIFIED",
+    "release_url": "https://github.com/minhductrn/music-sheet-transposer/releases/tag/v1.0.8",
+    "receipt": "PUBLICATION.json"
   }
 }
